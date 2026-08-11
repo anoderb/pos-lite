@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+:root {
+  --font-inter: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-poppins: 'Poppins', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --color-primary: #16A34A;
+  --color-accent: #22C55E;
+  --color-mint: #ECFDF5;
+  --color-bg: #F9FAFB;
+  --color-warning: #F5E60D;
+  --color-danger: #EF4444;
+  --color-info: #6474B8;
+  --color-border: #D1D7E0;
+}
+
+@theme inline {
+  --color-background: var(--color-bg);
+  --color-foreground: #171717;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-heading: var(--font-poppins), system-ui, sans-serif;
+}
+
+body {
+  background: var(--color-bg);
+  color: #171717;
+  font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* Aplikasi bukan dokumen teks — hover teks jangan jadi cursor ketik (I-beam).
+     Input/textarea tetap bisa diketik & di-select. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Tetap izinkan teks di-select di dalam form field */
+input, textarea, [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-poppins), system-ui, sans-serif;
+}
+
+/* Smooth scroll for horizontal product lists */
+.scroll-snap-x {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.scroll-snap-x > * {
+  scroll-snap-align: start;
+}
+
+/* Hide scrollbar for product carousels */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Fade-in animation */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fadeIn 200ms ease-out;
+}
