@@ -72,6 +72,15 @@ api.interceptors.response.use(
       error.response?.data?.pesan ||
       error.message ||
       'Terjadi kesalahan pada koneksi server';
+
+    // Rate limit (429) → notify global RateLimitProvider
+    if (typeof window !== 'undefined' && error.response?.status === 429) {
+      const retryAfter = Number(error.response?.headers?.['retry-after']) || 0;
+      window.dispatchEvent(
+        new CustomEvent('rate-limited', { detail: { retryAfter } })
+      );
+    }
+
     return Promise.reject(new Error(errorMsg));
   }
 );

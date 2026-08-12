@@ -1,4 +1,5 @@
 import "./globals.css";
+import RateLimitProvider from "@/components/RateLimitProvider";
 
 export const metadata = {
   title: "Tokiva — Kasir Cerdas untuk UMKM Modern",
@@ -8,7 +9,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="id" className="h-full antialiased">
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans">
+        <RateLimitProvider>{children}</RateLimitProvider>
+      </body>
     </html>
   );
 }
