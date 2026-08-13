@@ -75,7 +75,7 @@ api.interceptors.response.use(
 
     // Rate limit (429) → notify global RateLimitProvider
     if (typeof window !== 'undefined' && error.response?.status === 429) {
-      const retryAfter = Number(error.response?.headers?.['retry-after']) || 0;
+      const retryAfter = Number(error.response?.headers?.['retry-after']) || Number(error.response?.data?.retry_after_seconds) || 0;
       window.dispatchEvent(
         new CustomEvent('rate-limited', { detail: { retryAfter } })
       );

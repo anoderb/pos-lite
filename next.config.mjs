@@ -14,6 +14,8 @@ const nextConfig = {
       {
         source: '/(.*)',
         headers: [
+          // Explicit value overrides Vercel's wildcard CORS default for this public frontend.
+          { key: 'Access-Control-Allow-Origin', value: 'https://pos-lite-delta.vercel.app' },
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
