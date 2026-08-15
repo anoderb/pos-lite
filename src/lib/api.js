@@ -3,7 +3,19 @@ import axios from 'axios';
 // Dynamic API base URL.
 // Priority: NEXT_PUBLIC_API_URL env → deployed hostname convention → localhost dev.
 function getApiBaseUrl() {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    const configuredUrl = process.env.NEXT_PUBLIC_API_URL;
+    // Keep local FE/BE on same host name so HttpOnly refresh cookies are sent.
+    // `localhost` and `127.0.0.1` are different cookie hosts.
+    if (
+      typeof window !== 'undefined' &&
+      window.location.hostname === 'localhost' &&
+      configuredUrl.startsWith('http://127.0.0.1:5000')
+    ) {
+      return configuredUrl.replace('http://127.0.0.1:5000', 'http://localhost:5000');
+    }
+    return configuredUrl;
+  }
   if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
     // Deployed: assume api.<tld> subdomain next to the app host.
     const host = window.location.hostname;
