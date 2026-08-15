@@ -298,9 +298,14 @@ export default function OwnerPengaturanPage() {
         <form
           onSubmit={async (e) => {
             e.preventDefault();
+            const passLama = e.target.password_lama.value;
             const passBaru = e.target.password_baru.value;
             const konfirmPass = e.target.konfirm_password.value;
 
+            if (!passLama) {
+              setFeedback({ isOpen: true, type: 'error', title: 'Validasi Gagal', message: 'Password lama wajib diisi!' });
+              return;
+            }
             if (!passBaru || passBaru.length < 8) {
               setFeedback({ isOpen: true, type: 'error', title: 'Validasi Gagal', message: 'Password baru minimal harus 8 karakter!' });
               return;
@@ -312,6 +317,7 @@ export default function OwnerPengaturanPage() {
 
             try {
               const res = await api.post('/auth/ganti-password', {
+                old_password: passLama,
                 new_password: passBaru,
               });
               setFeedback({ isOpen: true, type: 'success', title: 'Password Diperbarui!', message: res?.pesan || 'Password akun Anda berhasil diperbarui!' });
@@ -322,6 +328,13 @@ export default function OwnerPengaturanPage() {
           }}
           className="space-y-3.5 text-xs"
         >
+          <Input
+            name="password_lama"
+            type="password"
+            label="Password Lama"
+            placeholder="Masukkan password saat ini"
+            required
+          />
           <Input
             name="password_baru"
             type="password"

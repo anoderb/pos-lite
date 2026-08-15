@@ -28,8 +28,17 @@ export const useAuthStore = create((set, get) => ({
           isInitialized: true,
         });
 
-        // Verifikasi token ke backend secara silent
-        api.get('/auth/profil')
+        // Rotate refresh cookie first, then verify profile with fresh access token.
+        api.post('/auth/refresh')
+          .then((refreshRes) => {
+            const refreshed = refreshRes?.data || refreshRes;
+            const nextToken = refreshed?.access_token;
+            if (nextToken) {
+              localStorage.setItem('tokiva_jwt_token', nextToken);
+              set({ token: nextToken });
+            }
+            return api.get('/auth/profil');
+          })
           .then((res) => {
             if (res?.berhasil && res.data) {
               const profil = res.data;
@@ -109,8 +118,14 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Logout Action
-  logout: () => {
+  // Logout Action: revoke server session before clearing local state.
+  logout: async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // Local cleanup still runs if server session already expired.
+    }
+
     if (typeof window !== 'undefined') {
       localStorage.removeItem('tokiva_jwt_token');
       localStorage.removeItem('tokiva_user_profile');
