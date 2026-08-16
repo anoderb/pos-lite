@@ -1,6 +1,7 @@
 {
   "name": "Tokiva — Kelola Toko, Jualan Makin Cerdas",
   "short_name": "Tokiva",
+  "id": "/",
   "description": "Aplikasi kasir & manajemen toko: kelola transaksi, stok, karyawan, dan laporan penjualan dalam satu aplikasi.",
   "start_url": "/login",
   "scope": "/",

@@ -5,9 +5,9 @@ import { useEffect } from 'react';
 export default function PwaRegister() {
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {
-        /* gagal daftar SW tidak memblokir aplikasi */
-      });
+      navigator.serviceWorker
+        .register('/sw.js')
+        .catch((err) => console.warn('[PWA] Service worker gagal didaftarkan:', err));
     }
   }, []);
 
