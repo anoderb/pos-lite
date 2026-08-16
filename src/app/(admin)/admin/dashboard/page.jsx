@@ -151,7 +151,7 @@ export default function AdminDashboardPage() {
                       <Icon className="w-4 h-4" />
                     </div>
                   </div>
-                  <div className="text-2xl font-black text-slate-100 tracking-tight font-[family-name:var(--font-poppins)]">
+                  <div className="text-2xl font-bold text-slate-100 tracking-tight">
                     {card.value}
                   </div>
                   <p className="text-[11px] font-medium text-slate-400 mt-1 flex items-center gap-1">

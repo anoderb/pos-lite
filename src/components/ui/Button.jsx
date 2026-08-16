@@ -14,6 +14,7 @@ export default function Button({
   variant = 'primary',
   size = 'md',
   isLoading = false,
+  showLoading = false,
   fullWidth = false,
   icon: Icon,
   className,
@@ -45,10 +46,11 @@ export default function Button({
         fullWidth && 'w-full',
         className
       )}
+      data-no-loading
       disabled={disabled || isLoading}
       {...props}
     >
-      {isLoading ? (
+      {showLoading && isLoading ? (
         <Loader2 className="w-4 h-4 animate-spin" />
       ) : Icon ? (
         <Icon className="w-4 h-4" />

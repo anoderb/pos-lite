@@ -65,7 +65,7 @@ export default function OwnerSidebar() {
           <Store className="w-6 h-6" />
         </div>
         <div className="min-w-0">
-          <h2 className="text-sm font-bold text-gray-900 truncate font-[family-name:var(--font-poppins)]">
+          <h2 className="text-sm font-bold text-gray-900 truncate">
             {toko?.nama || APP_NAME}
           </h2>
           <p className="text-[11px] font-semibold text-[#15803D] flex items-center gap-1">

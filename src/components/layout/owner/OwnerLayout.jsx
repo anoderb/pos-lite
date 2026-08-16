@@ -32,21 +32,6 @@ export default function OwnerLayout({ children }) {
 
         {/* Page Content */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-28 md:pb-8">
-          {/* Breadcrumb Navigation (FIX-11) */}
-          <nav className="mb-4 flex items-center gap-1.5 text-xs text-gray-500">
-            <Link href="/owner/dashboard" className="hover:text-[#16A34A] transition-colors">
-              Dashboard
-            </Link>
-            {crumbs.map((crumb, i) => (
-              <span key={i} className="flex items-center gap-1.5">
-                <span className="text-gray-300">›</span>
-                <span className={i === crumbs.length - 1 ? 'text-gray-700 font-semibold' : ''}>
-                  {crumb}
-                </span>
-              </span>
-            ))}
-          </nav>
-
           {children}
         </main>
       </div>

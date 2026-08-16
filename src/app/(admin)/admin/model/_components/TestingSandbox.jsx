@@ -109,7 +109,7 @@ export default function TestingSandbox({ testingModel, videoRef, webcamActive, o
               <div className="space-y-3">
                 <div className={`p-3 rounded-xl border ${prediction.isDetected ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-amber-500/10 border-amber-500/30 text-amber-300'}`}>
                   <p className="text-[10px] font-semibold uppercase tracking-wider">Hasil Klasifikasi:</p>
-                  <p className="text-sm font-extrabold font-mono mt-0.5">{prediction.topLabel}</p>
+                  <p className="text-sm font-semibold font-mono mt-0.5">{prediction.topLabel}</p>
                   {!prediction.isDetected && (
                     <p className="text-[10px] text-amber-400 mt-1">
                       Probabilitas ({(prediction.topConfidence * 100).toFixed(1)}%) dibawah threshold ({(threshold * 100).toFixed(0)}%)

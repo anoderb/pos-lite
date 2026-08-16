@@ -34,17 +34,17 @@ export default function OwnerNavbar() {
   };
 
   return (
-    <header className="bg-white border-b border-gray-100 px-4 py-3 sticky top-0 z-30 flex items-center justify-between">
+    <header className="h-[68px] bg-white border-b border-gray-100 px-4 sm:px-5 sticky top-0 z-30 flex items-center justify-between">
       {/* Brand Header Owner */}
       <div className="flex items-center space-x-2">
-        <div className="p-2 bg-[#16A34A] text-white rounded-xl shadow-sm">
-          <Store className="w-5 h-5" />
+        <div className="w-10 h-10 bg-[#0CAF60] text-white rounded-xl shadow-sm flex items-center justify-center">
+          <Store className="w-[18px] h-[18px]" />
         </div>
         <div>
-          <h1 className="text-sm font-bold text-gray-900 truncate">
+          <h1 className="text-[16px] font-semibold leading-5 text-gray-900 truncate">
             {toko?.nama || APP_NAME}
           </h1>
-          <p className="text-[10px] font-semibold text-[#16A34A] flex items-center gap-1">
+          <p className="text-[11px] font-normal leading-4 text-[#0CAF60] flex items-center gap-1">
             <ShieldCheck className="w-3 h-3" />
             Owner Portal
           </p>
@@ -54,7 +54,7 @@ export default function OwnerNavbar() {
       {/* Connection & Owner Pill */}
       <div className="flex items-center space-x-3">
         <div
-          className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+          className={`flex items-center space-x-1 px-2 py-1 rounded-full text-[11px] font-medium border ${
             isOnline
               ? 'bg-emerald-50 text-[#16A34A] border-emerald-200'
               : 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
@@ -81,7 +81,7 @@ export default function OwnerNavbar() {
             className="flex items-center space-x-2 focus:outline-none group active:scale-95 transition-transform"
             title="Menu Profil & Logout"
           >
-            <div className="w-8 h-8 rounded-full bg-[#16A34A] text-white flex items-center justify-center font-extrabold text-xs shadow-xs ring-2 ring-emerald-100">
+            <div className="w-10 h-10 rounded-full bg-[#0CAF60] text-white flex items-center justify-center font-medium text-[16px] shadow-xs ring-2 ring-emerald-100">
               {user?.nama ? user.nama[0].toUpperCase() : 'O'}
             </div>
             <div className="hidden sm:block text-left">
@@ -101,13 +101,13 @@ export default function OwnerNavbar() {
               />
               <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 p-3 z-50 animate-in fade-in zoom-in-95 duration-150">
                 <div className="flex items-center space-x-3 p-2 bg-emerald-50/70 rounded-xl mb-2">
-                  <div className="w-10 h-10 rounded-full bg-[#16A34A] text-white flex items-center justify-center font-extrabold text-sm shrink-0 shadow-xs">
+                  <div className="w-10 h-10 rounded-full bg-[#16A34A] text-white flex items-center justify-center font-semibold text-sm shrink-0 shadow-xs">
                     {user?.nama ? user.nama[0].toUpperCase() : 'O'}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold text-gray-900 truncate">{user?.nama || 'Pemilik Toko'}</p>
                     <p className="text-[10px] text-gray-500 truncate">{user?.email || 'owner@example.com'}</p>
-                    <span className="inline-block mt-0.5 px-2 py-0.5 bg-emerald-100 text-[#16A34A] text-[9px] font-extrabold rounded-full uppercase">
+                    <span className="inline-block mt-0.5 px-2 py-0.5 bg-emerald-100 text-[#16A34A] text-[9px] font-semibold rounded-full uppercase">
                       Owner Toko
                     </span>
                   </div>

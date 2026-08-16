@@ -25,6 +25,8 @@ import {
   ArrowRight,
   Info,
   Loader2,
+  ReceiptText,
+  LayoutGrid,
 } from 'lucide-react';
 import { getTf } from '@/lib/tf';
 import { cn, formatRupiah } from '@/lib/utils';
@@ -73,9 +75,11 @@ export default function KasirPosPage() {
   const [showPayment, setShowPayment] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
+  const [payError, setPayError] = useState(null);
 
   // Payment
   const [metodeBayar, setMetodeBayar] = useState('cash');
+  const [tokoPay, setTokoPay] = useState(null); // pengaturan pembayaran dari /owner/toko
   const [uangDiterima, setUangDiterima] = useState('');
   const [completedTx, setCompletedTx] = useState(null);
 
@@ -105,11 +109,16 @@ export default function KasirPosPage() {
   const [isShiftLoading, setIsShiftLoading] = useState(true);
   const [modalAwal, setModalAwal] = useState('');
 
+  // Statistik hari ini (real dari BE dashboard) + kategori POS
+  const [todayStats, setTodayStats] = useState({ omzet: 0, total_transaksi: 0, total_item_terjual: 0, total_produk_terjual: 0 });
+  const [kategoriList, setKategoriList] = useState([]);
+  const [selectedKategori, setSelectedKategori] = useState('semua');
+
   // Feedback modal state (replaces native alert())
   const [feedback, setFeedback] = useState({ isOpen: false, type: 'success', title: '', message: '' });
   const showFeedback = (type, title, message) => setFeedback({ isOpen: true, type, title, message });
 
-  const { user } = useAuthStore();
+  const { user, toko } = useAuthStore();
 
   useEffect(() => {
     setMounted(true);
@@ -117,8 +126,54 @@ export default function KasirPosPage() {
     fetchPelanggan();
     fetchActiveModel();
     fetchShift();
-    
+    fetchTodayStats();
+    fetchKategori();
+    fetchTokoPay();
   }, []);
+
+  const fetchTokoPay = async () => {
+    try {
+      const res = await api.get('/owner/toko');
+      const d = res?.data || res;
+      if (d) setTokoPay(d);
+    } catch { setTokoPay(null); }
+  };
+
+  // Metode tersedia: tunai selalu; qris/transfer hanya jika aktif + lengkap
+  const metodeTersedia = [
+    { id: 'cash', label: 'Tunai', icon: Banknote },
+    ...(tokoPay?.qris_aktif && tokoPay?.qris_url ? [{ id: 'qris', label: 'QRIS', icon: QrCode }] : []),
+    ...(tokoPay?.transfer_aktif && tokoPay?.bank_no_rekening ? [{ id: 'transfer', label: 'Transfer', icon: Building2 }] : []),
+  ];
+
+  // Fallback: metode terpilih tidak tersedia → kembalikan ke tunai
+  useEffect(() => {
+    if (tokoPay === null) return;
+    if (!metodeTersedia.some(m => m.id === metodeBayar)) setMetodeBayar('cash');
+  }, [tokoPay]);
+
+  const fetchTodayStats = async () => {
+    try {
+      const res = await api.get('/owner/dashboard', { params: { periode: 'hari_ini' } });
+      const d = res?.data || res;
+      if (d) setTodayStats({
+        omzet: d.omzet || 0,
+        total_transaksi: d.total_transaksi || 0,
+        total_item_terjual: d.total_item_terjual || 0,
+        total_produk_terjual: d.total_produk_terjual || 0,
+      });
+    } catch { /* biarkan 0 */ }
+  };
+
+  const fetchKategori = async () => {
+    try {
+      const res = await api.get('/kasir/kategori');
+      const data = res?.berhasil ? res.data : (Array.isArray(res?.data) ? res.data : []);
+      setKategoriList(Array.isArray(data) ? data : []);
+    } catch {
+      setKategoriList([]);
+    }
+  };
 
   const fetchShift = async () => {
     try {
@@ -761,6 +816,13 @@ export default function KasirPosPage() {
     }
   };
 
+  // Sembunyikan bottom nav saat struk tampil (full-screen)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent(showReceipt ? 'owner-nav-hide' : 'owner-nav-show'));
+    return () => window.dispatchEvent(new CustomEvent('owner-nav-show'));
+  }, [showReceipt]);
+
   /* ── Checkout ── */
   const handleBayar = async () => {
     if (isPaying || (metodeBayar === 'cash' && uangNum < total)) return;
@@ -793,18 +855,27 @@ export default function KasirPosPage() {
 
       const tx = {
         nomor_transaksi: data.nomor_transaksi || `#TRK-${Date.now().toString().slice(-6)}`,
-        tanggal: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
+        tanggal: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
         waktu: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
         total,
         uang_diterima: metodeBayar === 'cash' ? uangNum : total,
         kembalian: metodeBayar === 'cash' ? kembalian : 0,
+        items: cart.map(item => ({ ...item })),
+        kasir: user?.nama || 'Kasir',
+        toko: toko?.nama || 'Toko',
+        toko_alamat: toko?.alamat || '',
+        pelanggan: selectedCustomer?.nama || 'Pelanggan Umum',
+        metode_bayar: metodeBayar,
       };
 
       setCompletedTx(tx);
       setShowPayment(false);
       setShowReceipt(true);
+      setPayError(null);
       fetchProduk();
+      fetchTodayStats();
     } catch (err) {
+      setPayError(err.response?.data?.pesan || err.message || 'Terjadi kesalahan saat memproses pembayaran.');
       showFeedback('error', 'Gagal Transaksi', err.response?.data?.pesan || err.message);
     } finally {
       setIsPaying(false);
@@ -821,110 +892,11 @@ export default function KasirPosPage() {
     setView('home');
   };
 
-  const filteredProduk = produkList.filter(p =>
-    p.nama.toLowerCase().includes(search.toLowerCase()) || p.barcode?.includes(search)
-  );
-
-  /* ════════════════════════════════════════════════════
-     SCREEN 4: KERANJANG
-     ════════════════════════════════════════════════════ */
-  if (view === 'cart') {
-    return (
-      <>
-      <div className="max-w-md mx-auto relative min-h-[calc(100vh-10rem)] pb-56">
-        {/* Header */}
-        <div className="flex items-center justify-between py-2 border-b border-gray-100 bg-[#F8FAF9] sticky top-0 z-20">
-          <button onClick={() => setView('home')} className="p-2 -ml-2">
-            <X className="w-5 h-5 text-gray-600" />
-          </button>
-          <h1 className="text-base font-bold text-gray-900 font-[family-name:var(--font-poppins)]">Keranjang ({cartCount})</h1>
-          <button onClick={clearCart} className="text-xs font-semibold text-[#EF4444]">Kosongkan</button>
-        </div>
-
-        {/* Cart Items (Scrolls naturally under the fixed card) */}
-        <div className="space-y-3 py-3">
-          {cart.map((item, idx) => (
-            <div key={item.id || `cart-item-${idx}`} className="flex items-center gap-3 bg-white rounded-2xl p-3 border border-gray-100 shadow-xs">
-              <ProdukThumb nama={item.nama} img={item.foto_url} className="w-14 h-14 rounded-xl shrink-0 text-xs" />
-              <div className="flex-1 min-w-0">
-                <h4 className="text-xs font-bold text-gray-900 truncate">{item.nama}</h4>
-                <p className="text-[11px] text-gray-500">{item.qty} x {formatRupiah(item.harga)}</p>
-              </div>
-              <div className="flex flex-col items-end gap-1.5">
-                <span className="text-xs font-extrabold text-gray-900">{formatRupiah(item.harga * item.qty)}</span>
-                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                  <button data-no-loading onClick={() => updateQty(item.id, -1)} className="w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-all active:scale-95">
-                    <Minus className="w-3 h-3" />
-                  </button>
-                  <span className="w-6 h-6 flex items-center justify-center text-xs font-bold text-gray-900 border-x border-gray-200">{item.qty}</span>
-                  <button data-no-loading onClick={() => updateQty(item.id, 1)} className="w-6 h-6 flex items-center justify-center text-[#16A34A] hover:bg-emerald-50 transition-all active:scale-95">
-                    <Plus className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Fixed Locked Total Card (Elevated to bottom-28 to clear floating nav bar cleanly) */}
-        <div className="fixed bottom-28 left-4 right-4 max-w-md mx-auto z-30 bg-white rounded-2xl border border-gray-200 p-4 space-y-2 shadow-xl">
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>Subtotal</span>
-            <span className="font-semibold text-gray-900">{formatRupiah(subtotal)}</span>
-          </div>
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>Diskon</span>
-            <span className="font-semibold text-[#EF4444]">- {formatRupiah(diskon)}</span>
-          </div>
-          <div className="flex justify-between text-sm font-bold text-gray-900 pt-2 border-t border-gray-100">
-            <span>Total</span>
-            <span className="text-[#16A34A] font-extrabold text-base">{formatRupiah(total)}</span>
-          </div>
-          <button
-            onClick={() => setShowPayment(true)}
-            disabled={cart.length === 0}
-            className="w-full mt-2 flex items-center justify-center gap-2 bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold py-3.5 rounded-2xl transition-all disabled:opacity-50 shadow-sm"
-          >
-            Bayar Sekarang
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-
-
-
-        {/* Payment / Customer / Receipt modals rendered below */}
-        {renderCustomerSheet()}
-        {renderPaymentSheet()}
-        {renderReceiptModal()}
-
-        {/* Koreksi Feedback Toast */}
-        {koreksiToast && (
-          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-emerald-500/30 animate-fade-in flex items-center gap-2">
-            <CheckCircle className="w-4 h-4" />
-            Koreksi tersimpan! Admin akan review untuk training AI.
-          </div>
-        )}
-
-        {/* Already In Cart Toast */}
-        {alreadyInCartToast && (
-          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-amber-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-amber-500/30 animate-fade-in flex items-center gap-2">
-            <Info className="w-4 h-4" />
-            {alreadyInCartToast.nama} sudah di keranjang. Tambah qty manual.
-          </div>
-        )}
-        </div>
-
-      {/* Feedback Modal (replaces native alert) */}
-      <FeedbackModal
-        isOpen={feedback.isOpen}
-        onClose={() => setFeedback({ ...feedback, isOpen: false })}
-        type={feedback.type}
-        title={feedback.title}
-        message={feedback.message}
-      />
-      </>
-    );
-  }
+  const filteredProduk = produkList.filter(p => {
+    const matchSearch = !search || p.nama.toLowerCase().includes(search.toLowerCase()) || p.barcode?.includes(search);
+    const matchKategori = selectedKategori === 'semua' || p.kategori_id === selectedKategori;
+    return matchSearch && matchKategori;
+  });
 
   /* ════════════════════════════════════════════════════
      SCREEN 1: HALAMAN KASIR (AWAL) — HOME VIEW
@@ -992,186 +964,207 @@ export default function KasirPosPage() {
   }
 
   return (
-    <div className="max-w-md mx-auto space-y-5">
-      {/* ── Header Greeting ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900 font-[family-name:var(--font-poppins)]">
-            Halo, {user?.nama || 'Kasir'} 👋
-          </h1>
-          <p className="text-xs text-gray-500" suppressHydrationWarning>
-            Shift aktif • {mounted ? new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '18:43'} WIB
+    <div className="max-w-[430px] mx-auto space-y-4 pb-24 text-[#10233E]">
+      {/* ── Greeting Banner + Stat Hari Ini ── */}
+      <section className="relative overflow-hidden rounded-[20px] p-4 bg-gradient-to-br from-[#E8FAF0] via-white to-[#FFF8D9] shadow-[0_2px_10px_rgba(16,35,62,.05)]">
+        <div className="relative z-10 max-w-[62%]">
+          <h1 className="text-base font-semibold leading-6">Halo, {user?.nama || 'Kasir'} 👋</h1>
+          <p className="text-[10px] font-normal text-[#68758A] mt-0.5" suppressHydrationWarning>
+            {shift ? `Shift aktif • ${mounted ? new Date(shift.waktu_buka || Date.now()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''} WIB` : 'Belum ada shift aktif'}
           </p>
+          <div className="flex gap-1.5 mt-3">
+            <div className="flex-1 bg-white/85 backdrop-blur rounded-xl p-2">
+              <div className="flex items-center gap-1"><ShoppingCart className="w-3 h-3 text-[#0CAF60]" /><span className="text-[8px] font-medium text-[#68758A] truncate">Total Penjualan Hari Ini</span></div>
+              <p className="text-xs font-medium mt-0.5">{formatRupiah(todayStats.omzet)}</p>
+              <p className="text-[8px] font-normal text-[#68758A]">{todayStats.total_transaksi} Transaksi</p>
+            </div>
+            <div className="flex-1 bg-white/85 backdrop-blur rounded-xl p-2">
+              <div className="flex items-center gap-1"><ReceiptText className="w-3 h-3 text-violet-600" /><span className="text-[8px] font-medium text-[#68758A] truncate">Total Item Terjual</span></div>
+              <p className="text-xs font-medium mt-0.5">{todayStats.total_item_terjual} item</p>
+              <p className="text-[8px] font-normal text-[#68758A]">{todayStats.total_produk_terjual} Produk</p>
+            </div>
+          </div>
         </div>
-      </div>
+        <img src="/assets/tokiva-dashboard/img-pos-3d.png" alt="POS 3D" className="absolute right-0 bottom-0 w-[44%] h-[96%] object-contain object-right-bottom" />
+      </section>
 
-      {/* ── Search Bar with Inline Compact AI & Barcode Buttons ── */}
+      {/* ── Search Bar + AI Scan + Barcode ── */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#68758A]" />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Cari produk / scan barcode"
-            className="w-full pl-10 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs sm:text-sm text-gray-700 placeholder:text-gray-500 focus:outline-none focus:border-[#16A34A] focus:ring-1 focus:ring-[#16A34A]/30"
+            className="w-full pl-9 pr-3 py-2.5 bg-white rounded-xl text-xs font-normal text-[#10233E] placeholder:text-[#68758A] outline-none border border-gray-50 shadow-sm focus:border-[#0CAF60]"
           />
         </div>
         <button
           onClick={() => { setScanMode('ai'); handleOpenAiScan(); }}
           disabled={isModelLoading}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all border shrink-0',
-            isModelLoading
-              ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed'
-              : scanMode === 'ai'
-                ? 'bg-[#16A34A] text-white border-[#16A34A] shadow-xs'
-                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+            'flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-all shrink-0 shadow-sm',
+            isModelLoading ? 'bg-gray-100 text-gray-400' : 'bg-[#0CAF60] text-white hover:bg-[#087A4B] active:scale-[0.98]'
           )}
           title={isModelLoading ? 'Model AI sedang dimuat...' : 'Scan dengan AI Visual Camera'}
         >
           <Sparkles className="w-4 h-4" />
-          <span>{isModelLoading ? 'Memuat Model...' : 'AI Scan'}</span>
+          <span>{isModelLoading ? 'Memuat...' : 'AI Scan'}</span>
         </button>
         <button
           onClick={() => { setScanMode('barcode'); setShowBarcodeScan(true); }}
-          className={cn(
-            'flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all border shrink-0',
-            scanMode === 'barcode'
-              ? 'bg-[#16A34A] text-white border-[#16A34A] shadow-xs'
-              : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-          )}
+          className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-all shrink-0 bg-white border border-gray-100 text-[#68758A] shadow-sm hover:bg-gray-50 active:scale-[0.98]"
           title="Scan dengan Barcode Scanner"
         >
           <ScanBarcode className="w-4 h-4" />
-          <span className="hidden sm:inline">Barcode</span>
         </button>
+      </div>
+
+      {/* ── Kategori ── */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-medium leading-5">Kategori</h3>
+          <Link href="/owner/produk" className="text-[10px] font-medium text-[#0CAF60]">Lihat Semua</Link>
+        </div>
+        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar overscroll-x-contain">
+          <button
+            onClick={() => setSelectedKategori('semua')}
+            className={cn('shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all', selectedKategori === 'semua' ? 'bg-[#0CAF60] text-white shadow-sm' : 'bg-white text-[#68758A] shadow-sm hover:bg-[#E8FAF0]')}
+          >
+            Semua
+          </button>
+          {kategoriList.map(k => (
+            <button
+              key={k.id}
+              onClick={() => setSelectedKategori(k.id)}
+              className={cn('shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all', selectedKategori === k.id ? 'bg-[#0CAF60] text-white shadow-sm' : 'bg-white text-[#68758A] shadow-sm hover:bg-[#E8FAF0]')}
+            >
+              {k.nama}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Produk Favorit (Horizontal Scroll) ── */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-gray-900 font-[family-name:var(--font-poppins)]">Produk Favorit</h3>
-          <button className="text-xs font-semibold text-[#16A34A]">Lihat Semua</button>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-medium leading-5">Produk Favorit</h3>
+          <Link href="/owner/produk" className="text-[10px] font-medium text-[#0CAF60]">Kelola</Link>
         </div>
         {filteredProduk.length === 0 ? (
           <div className="text-center py-8 space-y-2">
             <Package className="w-8 h-8 text-gray-300 mx-auto" />
-            <p className="text-xs text-gray-500 font-medium">Produk tidak ditemukan</p>
+            <p className="text-[11px] font-normal text-[#68758A]">Produk tidak ditemukan</p>
             {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="text-xs font-semibold text-[#16A34A] hover:underline"
-              >
+              <button onClick={() => setSearch('')} className="text-[11px] font-medium text-[#0CAF60] hover:underline">
                 Reset pencarian
               </button>
             )}
           </div>
         ) : (
-        <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-1">
-          {filteredProduk.slice(0, 6).map((p, idx) => {
-            const habis = Number(p.stok ?? 0) <= 0;
-            return (
-            <button
-              key={p.id || `fav-${idx}`}
-              onClick={() => addToCart(p)}
-              disabled={habis}
-              className={`shrink-0 w-28 bg-white border rounded-2xl p-2.5 shadow-xs transition-all active:scale-[0.97] relative ${habis ? 'border-gray-200 opacity-60 cursor-not-allowed' : 'border-gray-100 hover:border-[#16A34A]'}`}
-            >
-              {habis && (
-                <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-red-500 text-white text-[8px] font-bold rounded-md">
-                  HABIS
-                </span>
-              )}
-              <ProdukThumb nama={p.nama} img={p.foto_url} className="w-full h-16 rounded-lg mb-2 text-sm" />
-              <h4 className="text-[11px] font-semibold text-gray-900 truncate">{p.nama}</h4>
-              <p className={`text-[11px] font-bold mt-0.5 ${habis ? 'text-red-600' : 'text-[#15803D]'}`}>{formatRupiah(p.harga)}</p>
-            </button>
-            );
-          })}
-        </div>
+          <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-1">
+            {filteredProduk.slice(0, 8).map((p, idx) => {
+              const habis = Number(p.stok ?? 0) <= 0;
+              return (
+                <div
+                  key={p.id || `fav-${idx}`}
+                  className={`shrink-0 w-28 bg-white border rounded-[16px] p-2.5 shadow-sm transition-all relative ${habis ? 'border-gray-100 opacity-60' : 'border-gray-50 hover:border-[#0CAF60]'}`}
+                >
+                  {habis && (
+                    <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-[#FFF0F0] text-[#D94850] text-[8px] font-medium rounded-md">
+                      HABIS
+                    </span>
+                  )}
+                  <ProdukThumb nama={p.nama} img={p.foto_url} className="w-full h-16 rounded-lg mb-2 text-sm" />
+                  <h4 className="text-[11px] font-medium text-[#10233E] truncate">{p.nama}</h4>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className={`text-[11px] font-medium ${habis ? 'text-[#D94850]' : 'text-[#087A4B]'}`}>{formatRupiah(p.harga)}</p>
+                    <button
+                      onClick={() => addToCart(p)}
+                      disabled={habis}
+                      className="w-5 h-5 rounded-md bg-[#E8FAF0] text-[#0CAF60] flex items-center justify-center active:scale-90 transition-all disabled:opacity-50"
+                      title="Tambah ke keranjang"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {/* ── Mini Cart Preview with Bottom Subtotal & Kosongkan Footer Bar ── */}
-      {cart.length > 0 && (
-        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-          {/* Header Row */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50 bg-gray-50/50">
-            <div className="flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-[#16A34A]" />
-              <span className="text-sm font-extrabold text-gray-900">Keranjang ({cartCount})</span>
-            </div>
+      {/* ── Keranjang Card (selalu tampil) ── */}
+      <div className="bg-white border border-gray-50 rounded-[18px] shadow-sm overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50 bg-[#FAFBFC]">
+          <div className="flex items-center gap-2">
+            <span className="w-7 h-7 rounded-lg bg-[#E8FAF0] text-[#0CAF60] flex items-center justify-center"><ShoppingCart className="w-3.5 h-3.5" /></span>
+            <span className="text-[13px] font-medium text-[#10233E]">Keranjang ({cartCount})</span>
           </div>
+          {cart.length > 0 && (
+            <button onClick={clearCart} className="text-[10px] font-medium text-[#EF4444] flex items-center gap-1"><Trash2 className="w-3 h-3" /> Bersihkan</button>
+          )}
+        </div>
 
-          {/* Item List with Steppers (+/-) and Delete Button */}
-          <div className="px-4 py-2 space-y-2.5 max-h-48 overflow-y-auto">
+        {cart.length === 0 ? (
+          <div className="px-4 py-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-[#E8FAF0] flex items-center justify-center mx-auto mb-2 text-[#0CAF60]"><ShoppingCart className="w-5 h-5" /></div>
+            <p className="text-[11px] font-medium text-[#10233E]">Belum ada produk</p>
+            <p className="text-[10px] font-normal text-[#68758A] mt-0.5">Scan atau tambahkan produk untuk memulai transaksi</p>
+          </div>
+        ) : (
+          <div className="px-4 py-2 space-y-2 max-h-44 overflow-y-auto hide-scrollbar">
             {cart.map((item, idx) => (
               <div key={item.id || `mini-cart-${idx}`} className="flex items-center justify-between text-xs py-1.5 border-b border-gray-50 last:border-0">
                 <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
                   <ProdukThumb nama={item.nama} img={item.foto_url} className="w-8 h-8 rounded-lg shrink-0 text-[9px]" />
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-xs text-gray-900 truncate" title={item.nama}>{item.nama}</p>
-                    <p className="text-gray-500 text-[11px]">{item.qty} x {formatRupiah(item.harga)}</p>
+                    <p className="font-medium text-xs text-[#10233E] truncate" title={item.nama}>{item.nama}</p>
+                    <p className="text-[#68758A] text-[10px] font-normal">{item.qty} x {formatRupiah(item.harga)}</p>
                   </div>
                 </div>
-
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-bold text-xs text-gray-900">{formatRupiah(item.harga * item.qty)}</span>
-
-                  {/* Quantity Stepper Controls: Minus (-), Qty Count, Plus (+) */}
-                  <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-1 py-0.5">
-                    <button
-                      onClick={() => updateQty(item.id, -1)}
-                      className="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-rose-600 rounded hover:bg-white transition-colors"
-                      title="Kurangi Qty"
-                    >
+                  <span className="font-medium text-xs text-[#10233E]">{formatRupiah(item.harga * item.qty)}</span>
+                  <div className="flex items-center gap-1 bg-gray-50 border border-gray-100 rounded-lg px-1 py-0.5">
+                    <button onClick={() => updateQty(item.id, -1)} className="w-5 h-5 flex items-center justify-center text-[#68758A] hover:text-rose-600 rounded hover:bg-white transition-colors" title="Kurangi Qty">
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="font-bold text-xs text-gray-900 px-0.5 min-w-[14px] text-center">{item.qty}</span>
-                    <button
-                      onClick={() => updateQty(item.id, 1)}
-                      className="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-[#16A34A] rounded hover:bg-white transition-colors"
-                      title="Tambah Qty"
-                    >
+                    <span className="font-medium text-xs text-[#10233E] px-0.5 min-w-[14px] text-center">{item.qty}</span>
+                    <button onClick={() => updateQty(item.id, 1)} className="w-5 h-5 flex items-center justify-center text-[#68758A] hover:text-[#0CAF60] rounded hover:bg-white transition-colors" title="Tambah Qty">
                       <Plus className="w-3 h-3" />
                     </button>
                   </div>
-
-                  {/* Delete Item Button */}
-                  <button
-                    onClick={() => updateQty(item.id, -item.qty)}
-                    className="p-1 text-gray-500 hover:text-rose-500 transition-colors"
-                    title="Hapus barang"
-                  >
-                    <X className="w-4 h-4" />
+                  <button onClick={() => updateQty(item.id, -item.qty)} className="p-1 text-[#68758A] hover:text-rose-500 transition-colors" title="Hapus barang">
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
             ))}
           </div>
+        )}
 
-          {/* Bottom Footer Bar: Kosongkan (Left) & Subtotal (Right) */}
-          <div className="flex items-center justify-between px-4 py-3 bg-gray-50/80 border-t border-gray-100">
-            <button
-              onClick={clearCart}
-              className="text-xs text-rose-500 hover:text-rose-600 font-semibold flex items-center gap-1.5 transition-colors px-2.5 py-1 rounded-xl bg-rose-50/80 hover:bg-rose-100/80 border border-rose-200/50 active:scale-95"
-              title="Kosongkan seluruh isi keranjang"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Kosongkan</span>
-            </button>
-            <button
-              onClick={() => setView('cart')}
-              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 font-medium transition-colors"
-            >
-              <span>Subtotal</span>
-              <span className="font-extrabold text-gray-900 text-sm ml-0.5">{formatRupiah(subtotal)}</span>
-              <ChevronRight className="w-4 h-4 text-gray-500" />
-            </button>
+        {/* Footer Summary + Bayar */}
+        <div className="px-4 py-3 border-t border-gray-100 bg-[#FAFBFC] space-y-2">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="font-normal text-[#68758A]">Total</span>
+            <span className="font-normal text-[#68758A]">{cartCount} item</span>
           </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-normal text-[#68758A]">Total Bayar</span>
+            <span className="text-base font-semibold text-[#0CAF60]">{formatRupiah(subtotal)}</span>
+          </div>
+          <button
+            onClick={() => setShowPayment(true)}
+            disabled={cart.length === 0}
+            className="w-full py-3 bg-[#0CAF60] text-white rounded-xl text-[13px] font-medium shadow-sm hover:bg-[#087A4B] active:scale-[0.98] transition-all disabled:bg-gray-200 disabled:text-gray-400"
+          >
+            Bayar
+          </button>
         </div>
-      )}
+      </div>
 
       {/* ═════ MODALS ═════ */}
 
@@ -1206,9 +1199,9 @@ export default function KasirPosPage() {
               <button
                 onClick={() => { setShowBarcodeScan(false); setShowAiScan(true); handleOpenAiScan(); }}
                 className={cn(
-                  'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5',
+                  'px-3.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5',
                   showAiScan
-                    ? 'bg-[#16A34A] text-white font-bold shadow-sm'
+                    ? 'bg-[#0CAF60] text-white shadow-sm'
                     : 'text-gray-300 hover:text-white'
                 )}
               >
@@ -1218,9 +1211,9 @@ export default function KasirPosPage() {
               <button
                 onClick={() => { setShowAiScan(false); setShowBarcodeScan(true); }}
                 className={cn(
-                  'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5',
+                  'px-3.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5',
                   showBarcodeScan
-                    ? 'bg-[#16A34A] text-white font-bold shadow-sm'
+                    ? 'bg-[#0CAF60] text-white shadow-sm'
                     : 'text-gray-300 hover:text-white'
                 )}
               >
@@ -1229,7 +1222,7 @@ export default function KasirPosPage() {
               </button>
               <button
                 onClick={() => { setShowAiScan(false); setShowBarcodeScan(false); setView('home'); setAiCandidates([]); }}
-                className="px-3.5 py-1.5 rounded-full text-xs font-semibold text-gray-300 hover:text-white hover:bg-white/10 transition-all flex items-center gap-1.5"
+                className="px-3.5 py-1.5 rounded-full text-xs font-medium text-gray-300 hover:text-white hover:bg-white/10 transition-all flex items-center gap-1.5"
                 title="Beralih ke Input Manual POS"
               >
                 <PenLine className="w-3.5 h-3.5" />
@@ -1366,21 +1359,7 @@ export default function KasirPosPage() {
               </form>
             )}
 
-            {/* Demo Barcode Simulation Buttons (Barcode Mode Only) */}
-            {showBarcodeScan && (
-              <div className="mt-3 flex items-center justify-center gap-1.5 flex-wrap max-w-xs">
-                <span className="text-[10px] text-gray-500 font-medium">Test Barcode:</span>
-                {produkList.filter(p => p.barcode).slice(0, 2).map((p, idx) => (
-                  <button
-                    key={p.id || `test-code-${idx}`}
-                    onClick={() => handleDetectedBarcode(p.barcode)}
-                    className="px-2 py-1 bg-white/10 hover:bg-white/20 text-gray-200 rounded-lg text-[10px] font-mono border border-white/10 transition-colors"
-                  >
-                    {p.barcode}
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Demo Barcode Simulation Buttons — DIHAPUS (test-only) */}
           </div>
 
           {/* 4. Top 3 Predictions Candidate Banner (KHUSUS AI MODE ONLY) */}
@@ -1420,13 +1399,13 @@ export default function KasirPosPage() {
               <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-2.5">
                 <div className="flex items-center gap-2">
                   <ShoppingCart className="w-5 h-5 text-[#16A34A]" />
-                  <h4 className="font-extrabold text-sm text-gray-900">Keranjang ({cartCount})</h4>
+                  <h4 className="font-semibold text-sm text-gray-900">Keranjang ({cartCount})</h4>
                 </div>
                 <button
-                  onClick={() => setView('cart')}
+                  onClick={() => setShowPayment(true)}
                   className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900 font-medium transition-colors"
                 >
-                  Subtotal <span className="font-extrabold text-gray-900 text-sm ml-0.5">Rp {subtotal?.toLocaleString('id-ID')}</span>
+                  Subtotal <span className="font-semibold text-gray-900 text-sm ml-0.5">Rp {subtotal?.toLocaleString('id-ID')}</span>
                   <ChevronRight className="w-4 h-4 text-gray-500" />
                 </button>
               </div>
@@ -1436,7 +1415,7 @@ export default function KasirPosPage() {
                 {cart.map((item) => (
                   <div key={item.id} className="flex items-center justify-between bg-emerald-50/50 hover:bg-emerald-50 rounded-2xl p-2.5 transition-colors border border-emerald-100/50">
                     <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-1">
-                      <div className="w-8 h-8 rounded-xl bg-emerald-100 text-[#15803D] font-extrabold text-[11px] flex items-center justify-center shrink-0 border border-emerald-200">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-100 text-[#15803D] font-semibold text-[11px] flex items-center justify-center shrink-0 border border-emerald-200">
                         {item.nama?.substring(0, 2).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -1446,7 +1425,7 @@ export default function KasirPosPage() {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      <p className="font-extrabold text-xs text-gray-900">Rp {(item.harga * item.qty).toLocaleString('id-ID')}</p>
+                      <p className="font-semibold text-xs text-gray-900">Rp {(item.harga * item.qty).toLocaleString('id-ID')}</p>
                       
                       {/* Stepper Controls: Minus (-), Qty Count, Plus (+) */}
                       <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl px-1 py-0.5 shadow-sm">
@@ -1492,7 +1471,7 @@ export default function KasirPosPage() {
           <div className="fixed left-0 right-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl border-t border-gray-100 p-5 pb-24 animate-slide-up max-h-[85vh] overflow-y-auto">
             <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3" />
             <div className="flex items-center justify-between mb-1">
-              <h2 className="text-base font-bold text-gray-900 font-[family-name:var(--font-poppins)]">Pilih Produk</h2>
+              <h2 className="text-base font-bold text-gray-900">Pilih Produk</h2>
               <button onClick={() => setShowAiCandidates(false)} className="p-1"><X className="w-5 h-5 text-gray-500" /></button>
             </div>
             <p className="text-xs text-gray-500 mb-4">Kami menemukan beberapa pilihan produk yang mirip</p>
@@ -1593,7 +1572,7 @@ export default function KasirPosPage() {
         <div className="fixed left-0 right-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl border-t border-gray-100 p-5 pb-24 animate-slide-up max-h-[85vh] overflow-y-auto">
           <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3" />
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-bold text-gray-900 font-[family-name:var(--font-poppins)]">Pilih Pelanggan</h2>
+            <h2 className="text-base font-bold text-gray-900">Pilih Pelanggan</h2>
             <button onClick={() => setShowCustomerSelect(false)} className="p-1"><X className="w-5 h-5 text-gray-500" /></button>
           </div>
 
@@ -1643,28 +1622,34 @@ export default function KasirPosPage() {
     return (
       <>
         <div onClick={() => setShowPayment(false)} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fade-in" />
-        <div className="fixed left-0 right-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl border-t border-gray-100 p-5 pb-32 animate-slide-up max-h-[90vh] overflow-y-auto">
+        <div className="fixed left-0 right-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl border-t border-gray-100 p-5 pb-28 animate-slide-up max-h-[90vh] overflow-y-auto">
           <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3" />
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-bold text-gray-900 font-[family-name:var(--font-poppins)]">Pembayaran</h2>
-            <button onClick={() => setShowPayment(false)} className="p-1"><X className="w-5 h-5 text-gray-500" /></button>
+            <h2 className="text-base font-semibold text-[#10233E]">Pembayaran</h2>
+            <button onClick={() => setShowPayment(false)} className="p-1"><X className="w-5 h-5 text-[#68758A]" /></button>
           </div>
 
-          {/* Total */}
-          <div className="text-center mb-4">
-            <p className="text-xs text-gray-500">Total Bayar</p>
-            <h3 className="text-3xl font-extrabold text-gray-900 mt-0.5 font-[family-name:var(--font-poppins)]">{formatRupiah(total)}</h3>
+          {/* Ringkasan Belanja */}
+          <div className="bg-[#FAFBFC] border border-gray-50 rounded-[18px] p-4 space-y-2 mb-4">
+            <div className="flex justify-between text-xs">
+              <span className="font-normal text-[#68758A]">Subtotal</span>
+              <span className="font-medium text-[#10233E]">{formatRupiah(subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="font-normal text-[#68758A]">Diskon</span>
+              <span className="font-medium text-[#EF4444]">- {formatRupiah(diskon)}</span>
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+              <span className="text-xs font-medium text-[#10233E]">Total</span>
+              <span className="text-lg font-semibold text-[#0CAF60]">{formatRupiah(total)}</span>
+            </div>
           </div>
 
           {/* Metode Pembayaran */}
           <div className="mb-4">
-            <p className="text-xs font-semibold text-gray-500 mb-1.5">Metode Pembayaran</p>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: 'cash', label: 'Tunai', icon: Banknote },
-                { id: 'qris', label: 'QRIS', icon: QrCode },
-                { id: 'transfer', label: 'Transfer Bank', icon: Building2 },
-              ].map(m => {
+            <p className="text-[11px] font-medium text-[#68758A] mb-1.5">Metode Pembayaran</p>
+            <div className={cn('grid gap-2', metodeTersedia.length === 1 ? 'grid-cols-1' : metodeTersedia.length === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
+              {metodeTersedia.map(m => {
                 const Icon = m.icon;
                 const active = metodeBayar === m.id;
                 return (
@@ -1672,8 +1657,8 @@ export default function KasirPosPage() {
                     key={m.id}
                     onClick={() => setMetodeBayar(m.id)}
                     className={cn(
-                      'flex items-center gap-2 py-2.5 px-3 rounded-xl text-xs font-semibold border transition-all justify-center',
-                      active ? 'bg-[#16A34A] text-white border-[#16A34A]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                      'flex items-center gap-2 py-2.5 px-3 rounded-xl text-xs font-medium border transition-all justify-center',
+                      active ? 'bg-[#0CAF60] text-white border-[#0CAF60] shadow-sm' : 'bg-white text-[#68758A] border-gray-100 hover:bg-[#E8FAF0]'
                     )}
                   >
                     <Icon className="w-4 h-4" />
@@ -1688,15 +1673,15 @@ export default function KasirPosPage() {
           {metodeBayar === 'cash' && (
             <div className="space-y-3 mb-4">
               <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">Uang Diterima</label>
+                <label className="text-[11px] font-medium text-[#68758A] mb-1 block">Uang Diterima</label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-[#16A34A]">Rp</span>
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-[#0CAF60]">Rp</span>
                   <input
                     type="number"
                     value={uangDiterima}
                     onChange={e => setUangDiterima(e.target.value)}
                     placeholder={String(total)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-lg font-bold text-[#16A34A] focus:outline-none focus:border-[#16A34A] focus:ring-1 focus:ring-[#16A34A]/30"
+                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-100 rounded-xl text-lg font-medium text-[#0CAF60] outline-none focus:border-[#0CAF60]"
                   />
                 </div>
               </div>
@@ -1706,7 +1691,7 @@ export default function KasirPosPage() {
                 <button
                   type="button"
                   onClick={() => setUangDiterima(String(total))}
-                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-emerald-50 text-[#15803D] border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                  className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-[#E8FAF0] text-[#087A4B] hover:bg-emerald-100 transition-colors"
                 >
                   Uang Pas
                 </button>
@@ -1715,7 +1700,7 @@ export default function KasirPosPage() {
                     key={nominal}
                     type="button"
                     onClick={() => setUangDiterima(String(nominal))}
-                    className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors"
+                    className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-gray-50 text-[#68758A] hover:bg-gray-100 transition-colors"
                   >
                     {nominal >= 1000 ? `${nominal / 1000}rb` : nominal}
                   </button>
@@ -1723,20 +1708,32 @@ export default function KasirPosPage() {
               </div>
 
               <div className="flex justify-between items-center pt-1 border-t border-gray-100">
-                <span className="text-xs text-gray-500 font-medium">Kembalian</span>
-                <span className="text-lg font-extrabold text-[#16A34A]">{formatRupiah(kembalian)}</span>
+                <span className="text-xs font-normal text-[#68758A]">Kembalian</span>
+                <span className="text-lg font-semibold text-[#0CAF60]">{formatRupiah(kembalian)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Error Banner Gagal Bayar */}
+          {payError && (
+            <div className="mb-4 p-3 rounded-xl bg-[#FFF0F0] border border-[#F5C6C9] flex items-start gap-2 animate-fade-in">
+              <XCircle className="w-4 h-4 text-[#D94850] shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-medium text-[#D94850]">Pembayaran Gagal</p>
+                <p className="text-[10px] font-normal text-[#68758A] mt-0.5">{payError}</p>
               </div>
             </div>
           )}
 
           {/* CTA Bayar */}
           <button
-            onClick={handleBayar}
+            onClick={() => { setPayError(null); handleBayar(); }}
             disabled={isPaying || (metodeBayar === 'cash' && uangNum < total)}
-            className="w-full flex items-center justify-center gap-2 bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold py-3.5 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-50 shadow-sm"
+            className="w-full flex items-center justify-center gap-2 bg-[#0CAF60] hover:bg-[#087A4B] text-white font-medium py-3.5 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-50 shadow-sm"
           >
-            {isPaying ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-            {isPaying ? 'Memproses Pembayaran...' : 'Bayar Sekarang'}
+            {isPaying ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {isPaying ? 'Memproses Pembayaran...' : payError ? 'Coba Lagi' : 'Bayar Sekarang'}
+            {!isPaying && <ArrowRight className="w-4 h-4" />}
           </button>
         </div>
       </>
@@ -1748,60 +1745,132 @@ export default function KasirPosPage() {
      ════════════════════════════════════════════════════ */
   function renderReceiptModal() {
     if (!showReceipt || !completedTx) return null;
+    const tx = completedTx;
+    const metodeLabel = { cash: 'Tunai', qris: 'QRIS', transfer: 'Transfer Bank' }[tx.metode_bayar] || 'Tunai';
+
+    const shareStruk = async () => {
+      const lines = [
+        tx.toko,
+        tx.toko_alamat,
+        '--------------------------------',
+        `No.     : ${tx.nomor_transaksi}`,
+        `Tanggal : ${tx.tanggal}`,
+        `Waktu   : ${tx.waktu}`,
+        `Kasir   : ${tx.kasir}`,
+        `Pelanggan: ${tx.pelanggan}`,
+        `Metode  : ${metodeLabel}`,
+        '--------------------------------',
+        ...(tx.items || []).map(i => `${i.nama}\n  ${i.qty} x ${formatRupiah(i.harga)} = ${formatRupiah(i.harga * i.qty)}`),
+        '--------------------------------',
+        `Subtotal : ${formatRupiah(subtotal)}`,
+        `Diskon   : -${formatRupiah(diskon)}`,
+        `TOTAL    : ${formatRupiah(tx.total)}`,
+        `${metodeLabel}  : ${formatRupiah(tx.uang_diterima)}`,
+        `Kembalian: ${formatRupiah(tx.kembalian)}`,
+        '--------------------------------',
+        'Terima kasih telah berbelanja!',
+      ];
+      const text = lines.join('\n');
+      if (navigator.share) {
+        try { await navigator.share({ title: 'Struk ' + tx.nomor_transaksi, text }); return; } catch { /* batal share */ }
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        showFeedback('success', 'Struk Disalin', 'Teks struk telah disalin ke clipboard.');
+      } catch {
+        showFeedback('info', 'Struk', text.slice(0, 200));
+      }
+    };
+
     return (
-      <div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center p-6 animate-fade-in">
-        <div className="w-full max-w-sm text-center space-y-5">
-          {/* Checkmark */}
-          <div className="w-20 h-20 bg-[#ECFDF5] rounded-full flex items-center justify-center mx-auto">
-            <CheckCircle className="w-10 h-10 text-[#16A34A]" />
+      <div className="fixed inset-0 z-50 bg-[#F8FAF9] flex flex-col overflow-y-auto animate-fade-in">
+        <div className="w-full max-w-[430px] mx-auto px-4 py-6 pb-10">
+          {/* Success Header */}
+          <div className="text-center mb-4">
+            <div className="w-16 h-16 bg-[#E8FAF0] rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle className="w-8 h-8 text-[#0CAF60]" />
+            </div>
+            <h2 className="text-[17px] font-semibold text-[#10233E] mt-2">Pembayaran Berhasil</h2>
+            <p className="text-[11px] font-normal text-[#68758A] mt-0.5">Transaksi telah tersimpan</p>
           </div>
 
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 font-[family-name:var(--font-poppins)]">Transaksi Berhasil!</h2>
-            <p className="text-xs text-gray-500 mt-1">No. Transaksi</p>
-            <p className="text-sm font-bold text-gray-900 font-mono">{completedTx.nomor_transaksi}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{completedTx.tanggal} • {completedTx.waktu}</p>
-          </div>
+          {/* Struk Paper */}
+          <div className="bg-white rounded-[16px] shadow-sm border border-gray-50 p-4 font-mono text-[11px] text-[#10233E] leading-5">
+            {/* Header Toko */}
+            <div className="text-center pb-3">
+              <p className="text-[13px] font-semibold font-sans tracking-wide">{tx.toko}</p>
+              {tx.toko_alamat && <p className="text-[10px] font-sans font-normal text-[#68758A]">{tx.toko_alamat}</p>}
+              <p className="text-[10px] font-sans font-medium text-[#0CAF60] mt-1">STRUK PEMBELIAN</p>
+            </div>
 
-          {/* Rincian */}
-          <div className="bg-gray-50 rounded-2xl p-4 text-sm space-y-2 text-left">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Total Bayar</span>
-              <span className="font-semibold text-gray-900">{formatRupiah(completedTx.total)}</span>
+            <div className="border-t border-dashed border-gray-200 my-1" />
+
+            {/* Info Transaksi */}
+            <div className="py-1">
+              <div className="flex justify-between"><span className="text-[#68758A]">No. Struk</span><span>{tx.nomor_transaksi}</span></div>
+              <div className="flex justify-between"><span className="text-[#68758A]">Tanggal</span><span>{tx.tanggal}</span></div>
+              <div className="flex justify-between"><span className="text-[#68758A]">Waktu</span><span>{tx.waktu}</span></div>
+              <div className="flex justify-between"><span className="text-[#68758A]">Kasir</span><span>{tx.kasir}</span></div>
+              <div className="flex justify-between"><span className="text-[#68758A]">Pelanggan</span><span>{tx.pelanggan}</span></div>
+              <div className="flex justify-between"><span className="text-[#68758A]">Metode</span><span>{metodeLabel}</span></div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Uang Diterima</span>
-              <span className="font-semibold text-gray-900">{formatRupiah(completedTx.uang_diterima)}</span>
+
+            <div className="border-t border-dashed border-gray-200 my-1" />
+
+            {/* Items */}
+            <div className="py-1 space-y-1.5">
+              {(tx.items || []).map((i, idx) => (
+                <div key={idx}>
+                  <p className="font-sans font-medium">{i.nama}</p>
+                  <div className="flex justify-between text-[10px] text-[#68758A]">
+                    <span>{i.qty} x {formatRupiah(i.harga)}</span>
+                    <span className="text-[#10233E]">{formatRupiah(i.harga * i.qty)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="flex justify-between pt-2 border-t border-gray-200">
-              <span className="text-gray-500">Kembalian</span>
-              <span className="font-bold text-[#16A34A] text-base">{formatRupiah(completedTx.kembalian)}</span>
+
+            <div className="border-t border-dashed border-gray-200 my-1" />
+
+            {/* Totals */}
+            <div className="py-1 space-y-0.5">
+              <div className="flex justify-between"><span className="text-[#68758A]">Subtotal</span><span>{formatRupiah(subtotal)}</span></div>
+              <div className="flex justify-between"><span className="text-[#68758A]">Diskon</span><span className="text-[#D94850]">-{formatRupiah(diskon)}</span></div>
+              <div className="flex justify-between text-[13px] font-bold text-[#0CAF60] pt-1"><span>TOTAL</span><span>{formatRupiah(tx.total)}</span></div>
+              <div className="flex justify-between"><span className="text-[#68758A]">{metodeLabel}</span><span>{formatRupiah(tx.uang_diterima)}</span></div>
+              <div className="flex justify-between"><span className="text-[#68758A]">Kembalian</span><span>{formatRupiah(tx.kembalian)}</span></div>
             </div>
+
+            <div className="border-t border-dashed border-gray-200 my-1" />
+
+            <p className="text-center text-[10px] text-[#68758A] font-sans pt-1">Terima kasih telah berbelanja! 🙏</p>
           </div>
 
           {/* Actions */}
-          <button className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
-            <Share2 className="w-4 h-4" />
-            Bagikan Struk
-          </button>
-
-          <button
-            onClick={handleNewTransaction}
-            className="w-full flex items-center justify-center gap-2 bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold py-3.5 rounded-2xl transition-all shadow-sm"
-          >
-            Transaksi Baru
-            <ArrowRight className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={handleNewTransaction}
-            className="text-xs font-semibold text-gray-500 hover:text-gray-600 transition-colors"
-          >
-            Kembali ke Home
-          </button>
+          <div className="space-y-2 mt-4">
+            <button
+              onClick={shareStruk}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-gray-100 rounded-2xl text-[13px] font-medium text-[#10233E] hover:bg-gray-50 transition-colors shadow-sm"
+            >
+              <Share2 className="w-4 h-4" />
+              Bagikan Struk
+            </button>
+            <button
+              onClick={handleNewTransaction}
+              className="w-full flex items-center justify-center gap-2 bg-[#0CAF60] hover:bg-[#087A4B] text-white font-medium py-3.5 rounded-2xl transition-all shadow-sm"
+            >
+              Transaksi Baru
+              <ArrowRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleNewTransaction}
+              className="w-full text-[11px] font-normal text-[#68758A] hover:text-[#10233E] transition-colors py-1"
+            >
+              Kembali ke Home
+            </button>
+          </div>
         </div>
       </div>
-
     );
   }
 }

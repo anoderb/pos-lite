@@ -118,6 +118,18 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // Login via Google OAuth (session dari Supabase, profil dari /auth/oauth-sync)
+  loginWithGoogleSession: (session, pengguna, toko) => {
+    if (!session?.access_token || !pengguna) {
+      throw new Error('Sesi Google tidak valid');
+    }
+    localStorage.setItem('tokiva_jwt_token', session.access_token);
+    localStorage.setItem('tokiva_user_profile', JSON.stringify(pengguna));
+    if (toko) localStorage.setItem('tokiva_toko_profile', JSON.stringify(toko));
+    set({ token: session.access_token, user: pengguna, toko: toko || null, isLoading: false });
+    return pengguna;
+  },
+
   // Logout Action: revoke server session before clearing local state.
   logout: async () => {
     try {

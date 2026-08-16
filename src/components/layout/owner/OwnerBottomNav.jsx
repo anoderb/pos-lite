@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -19,6 +19,18 @@ import { cn } from '@/lib/utils';
 export default function OwnerBottomNav() {
   const pathname = usePathname();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
+
+  useEffect(() => {
+    const hide = () => setIsHidden(true);
+    const show = () => setIsHidden(false);
+    window.addEventListener('owner-nav-hide', hide);
+    window.addEventListener('owner-nav-show', show);
+    return () => {
+      window.removeEventListener('owner-nav-hide', hide);
+      window.removeEventListener('owner-nav-show', show);
+    };
+  }, []);
 
   const ownerDrawerItems = [
     {
@@ -55,7 +67,7 @@ export default function OwnerBottomNav() {
         )}
       >
         <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-5" />
-        <h3 className="text-lg font-bold text-gray-900 mb-4 px-1 font-[family-name:var(--font-poppins)]">
+        <h3 className="text-lg font-bold text-gray-900 mb-4 px-1">
           Menu Utama Owner
         </h3>
 
@@ -87,7 +99,10 @@ export default function OwnerBottomNav() {
       </div>
 
       {/* Floating Bottom Nav Bar with Elevated Center Hero POS Button */}
-      <div className="md:hidden fixed bottom-3 left-3 right-3 z-50">
+      <div className={cn(
+        'md:hidden fixed bottom-3 left-3 right-3 z-50 transition-transform duration-300 ease-out',
+        isHidden && 'translate-y-[120%]'
+      )}>
         <div className="bg-white/95 backdrop-blur-md border border-gray-100 shadow-xl rounded-2xl px-2 py-1.5 flex items-center justify-around relative">
           
           {/* 1. Dashboard */}
@@ -153,7 +168,7 @@ export default function OwnerBottomNav() {
             >
               <ScanBarcode className="w-6 h-6" />
             </Link>
-            <span className={cn('text-[10px] font-extrabold mt-0.5 tracking-tight', pathname === '/owner/pos' ? 'text-[#15803D]' : 'text-[#16A34A]')}>
+            <span className={cn('text-[10px] font-semibold mt-0.5 tracking-tight', pathname === '/owner/pos' ? 'text-[#15803D]' : 'text-[#16A34A]')}>
               Kasir POS
             </span>
           </div>

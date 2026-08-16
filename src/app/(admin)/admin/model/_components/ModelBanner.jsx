@@ -33,7 +33,7 @@ export default function ModelBanner({ model, classes, threshold, setThreshold, o
               {model.versi}
             </span>
           </div>
-          <h1 className="text-xl font-extrabold text-slate-100">{model.nama}</h1>
+          <h1 className="text-xl font-semibold text-slate-100">{model.nama}</h1>
           <p className="text-xs text-slate-400 max-w-xl">
             {model.deskripsi || 'Model klasifikasi gambar untuk deteksi otomatis di mesin kasir POS.'}
           </p>

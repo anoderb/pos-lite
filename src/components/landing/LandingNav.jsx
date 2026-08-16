@@ -17,7 +17,7 @@ export default function LandingNav() {
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10">
         <Link href="/" className="flex items-center gap-3" onClick={() => setOpen(false)}>
           <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-lg shadow-emerald-700/20"><Store className="h-5 w-5" /></span>
-          <span className="text-xl font-black tracking-tight text-slate-950">Tokiva<span className="text-emerald-700">.</span></span>
+          <span className="text-xl font-bold tracking-tight text-slate-950">Tokiva<span className="text-emerald-700">.</span></span>
         </Link>
         <nav className="hidden items-center gap-8 md:flex">
           {links.map((link) => <a key={link.href} href={link.href} className="text-sm font-semibold text-slate-600 transition hover:text-emerald-700">{link.label}</a>)}
