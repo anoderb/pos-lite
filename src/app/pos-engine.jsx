@@ -24,6 +24,7 @@ import {
   UserPlus,
   ArrowRight,
   Info,
+  Loader2,
 } from 'lucide-react';
 import { getTf } from '@/lib/tf';
 import { cn, formatRupiah } from '@/lib/utils';
@@ -71,6 +72,7 @@ export default function KasirPosPage() {
   const [selectedCustomer, setSelectedCustomer] = useState({ id: 'umum', nama: 'Pelanggan Umum', no_hp: '' });
   const [showPayment, setShowPayment] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
 
   // Payment
   const [metodeBayar, setMetodeBayar] = useState('cash');
@@ -761,7 +763,8 @@ export default function KasirPosPage() {
 
   /* ── Checkout ── */
   const handleBayar = async () => {
-    if (metodeBayar === 'cash' && uangNum < total) return;
+    if (isPaying || (metodeBayar === 'cash' && uangNum < total)) return;
+    setIsPaying(true);
 
     try {
       const payload = {
@@ -803,6 +806,8 @@ export default function KasirPosPage() {
       fetchProduk();
     } catch (err) {
       showFeedback('error', 'Gagal Transaksi', err.response?.data?.pesan || err.message);
+    } finally {
+      setIsPaying(false);
     }
   };
 
@@ -848,11 +853,11 @@ export default function KasirPosPage() {
               <div className="flex flex-col items-end gap-1.5">
                 <span className="text-xs font-extrabold text-gray-900">{formatRupiah(item.harga * item.qty)}</span>
                 <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                  <button onClick={() => updateQty(item.id, -1)} className="w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-50">
+                  <button data-no-loading onClick={() => updateQty(item.id, -1)} className="w-6 h-6 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-all active:scale-95">
                     <Minus className="w-3 h-3" />
                   </button>
                   <span className="w-6 h-6 flex items-center justify-center text-xs font-bold text-gray-900 border-x border-gray-200">{item.qty}</span>
-                  <button onClick={() => updateQty(item.id, 1)} className="w-6 h-6 flex items-center justify-center text-[#16A34A] hover:bg-emerald-50">
+                  <button data-no-loading onClick={() => updateQty(item.id, 1)} className="w-6 h-6 flex items-center justify-center text-[#16A34A] hover:bg-emerald-50 transition-all active:scale-95">
                     <Plus className="w-3 h-3" />
                   </button>
                 </div>
@@ -1727,11 +1732,11 @@ export default function KasirPosPage() {
           {/* CTA Bayar */}
           <button
             onClick={handleBayar}
-            disabled={metodeBayar === 'cash' && uangNum < total}
-            className="w-full flex items-center justify-center gap-2 bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold py-3.5 rounded-2xl transition-all disabled:opacity-50 shadow-sm"
+            disabled={isPaying || (metodeBayar === 'cash' && uangNum < total)}
+            className="w-full flex items-center justify-center gap-2 bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold py-3.5 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-50 shadow-sm"
           >
-            Bayar Sekarang
-            <ArrowRight className="w-4 h-4" />
+            {isPaying ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+            {isPaying ? 'Memproses Pembayaran...' : 'Bayar Sekarang'}
           </button>
         </div>
       </>

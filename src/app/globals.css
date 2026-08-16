@@ -37,6 +37,21 @@ input, textarea, [contenteditable="true"] {
   -webkit-user-select: text;
 }
 
+/* Consistent interaction feedback for every action button. Quantity controls opt out. */
+button:not([data-no-loading]) {
+  transition: transform 150ms ease, filter 150ms ease, opacity 150ms ease;
+}
+button:not([data-no-loading]):hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+button:not([data-no-loading]):active:not(:disabled) {
+  transform: scale(0.98);
+}
+button[data-no-loading] {
+  transition: transform 150ms ease, filter 150ms ease;
+}
+
+
 h1, h2, h3, h4 {
   font-family: var(--font-poppins), system-ui, sans-serif;
 }
