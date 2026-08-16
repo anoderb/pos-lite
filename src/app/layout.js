@@ -1,6 +1,7 @@
 import { Inter } from "next/font/google";
 import "./globals.css";
 import RateLimitProvider from "@/components/RateLimitProvider";
+import PwaRegister from "@/components/PwaRegister";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -27,6 +28,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="id" className={`h-full antialiased ${inter.variable}`}>
       <body className="min-h-full flex flex-col font-sans">
+        <PwaRegister />
         <RateLimitProvider>{children}</RateLimitProvider>
       </body>
     </html>

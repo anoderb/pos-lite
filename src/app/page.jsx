@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 
-// Landing page sudah dipisah ke repo tersendiri (tokiva-landing-page)
-// Root aplikasi web app.tokiva.biz.id → redirect ke landing tokiva.biz.id
+// Root aplikasi web app.tokiva.biz.id → langsung ke halaman login
 export default function RootPage() {
-  redirect('https://tokiva.biz.id');
+  redirect('/login');
 }
