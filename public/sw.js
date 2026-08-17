@@ -2,7 +2,7 @@
 const CACHE_NAME = 'tokiva-pwa-v1';
 const APP_SHELL = [
   '/login',
-  '/site.webmanifest',
+  '/manifest.webmanifest',
   '/icon-192.png',
   '/icon-512.png',
 ];
