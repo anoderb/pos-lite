@@ -11,7 +11,7 @@ import {
   MoreVertical, Pencil, Trash2, Power, ScanBarcode, ExternalLink,
 } from 'lucide-react';
 import BarcodeScannerModal from '@/components/admin/BarcodeScannerModal';
-import FeedbackModal from '@/components/ui/FeedbackModal';
+import { toast } from '@/components/ui/ToastProvider';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Skeleton from '@/components/ui/Skeleton';
 
@@ -31,10 +31,8 @@ export default function AdminDataCollectorPage() {
   const [syncStatus, setSyncStatus] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Feedback modal state (replaces native alert())
-  const [feedback, setFeedback] = useState({ isOpen: false, type: 'success', title: '', message: '' });
   const [unmappedDeleteTarget, setUnmappedDeleteTarget] = useState(null);
-  const showFeedback = (type, title, message) => setFeedback({ isOpen: true, type, title, message });
+  const showFeedback = (type, title, message) => toast[type](message, { title });
   const [isSyncConfigModal, setIsSyncConfigModal] = useState(false);
   const [syncConfigForm, setSyncConfigForm] = useState({
     auto_sync_enabled: false,
@@ -920,13 +918,7 @@ export default function AdminDataCollectorPage() {
       />
 
       {/* Feedback Modal (replaces native alert) */}
-      <FeedbackModal
-        isOpen={feedback.isOpen}
-        onClose={() => setFeedback({ ...feedback, isOpen: false })}
-        type={feedback.type}
-        title={feedback.title}
-        message={feedback.message}
-      />
+
     </AdminLayout>
   );
 }

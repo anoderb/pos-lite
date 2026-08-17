@@ -11,18 +11,17 @@ import {
   ArrowLeft,
   Check,
 } from 'lucide-react';
-import FeedbackModal from '@/components/ui/FeedbackModal';
+import { toast } from '@/components/ui/ToastProvider';
 
 export default function NotFoundPage() {
   const router = useRouter();
-  const [feedback, setFeedback] = useState({ isOpen: false, type: 'info', title: '', message: '' });
 
   const copyUrl = async () => {
     try {
       await navigator.clipboard.writeText(typeof window !== 'undefined' ? window.location.href : '');
-      setFeedback({ isOpen: true, type: 'success', title: 'URL Disalin', message: 'Alamat halaman telah disalin ke clipboard.' });
+      toast.success('Alamat halaman telah disalin ke clipboard.', { title: 'URL Disalin' });
     } catch {
-      setFeedback({ isOpen: true, type: 'info', title: 'Periksa URL', message: 'Periksa kembali URL yang kamu masukkan, lalu coba lagi.' });
+      toast.info('Periksa kembali URL yang kamu masukkan, lalu coba lagi.', { title: 'Periksa URL' });
     }
   };
 
@@ -66,7 +65,7 @@ export default function NotFoundPage() {
             </span>
           </Link>
           <button
-            onClick={() => setFeedback({ isOpen: true, type: 'info', title: 'Butuh Bantuan?', message: 'Silakan hubungi tim Tokiva melalui email support atau fitur bantuan di aplikasi.' })}
+            onClick={() => toast.info('Silakan hubungi tim Tokiva melalui email support atau fitur bantuan di aplikasi.', { title: 'Butuh Bantuan?' })}
             className="w-full flex items-center gap-3 p-3.5 text-left hover:bg-[#E8FAF0]/40 transition-colors rounded-b-[18px] md:rounded-b-none md:rounded-r-[18px]"
           >
             <span className="w-9 h-9 rounded-full bg-[#F3EEFF] text-violet-600 flex items-center justify-center shrink-0"><Headphones className="w-4 h-4" /></span>
@@ -111,13 +110,7 @@ export default function NotFoundPage() {
         </div>
       </div>
 
-      <FeedbackModal
-        isOpen={feedback.isOpen}
-        onClose={() => setFeedback({ ...feedback, isOpen: false })}
-        type={feedback.type}
-        title={feedback.title}
-        message={feedback.message}
-      />
+
     </div>
   );
 }

@@ -23,7 +23,7 @@ import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
-import FeedbackModal from '@/components/ui/FeedbackModal';
+import { toast } from '@/components/ui/ToastProvider';
 import { useAuthStore } from '@/store/authStore';
 import { api } from '@/lib/api';
 
@@ -75,7 +75,7 @@ export default function OwnerPengaturanPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [kasirForm, setKasirForm] = useState({ nama: '', email: '', password: '' });
 
-  const [feedback, setFeedback] = useState({ isOpen: false, type: 'success', title: '', message: '' });
+
   const [confirmDelete, setConfirmDelete] = useState({ isOpen: false, id: null, nama: '' });
   const [confirmToggle, setConfirmToggle] = useState({ isOpen: false, kasir: null });
 
@@ -137,10 +137,10 @@ export default function OwnerPengaturanPage() {
         no_telp: tokoData.noHp,
         catatan_footer: tokoData.footerStruk,
       });
-      setFeedback({ isOpen: true, type: 'success', title: 'Berhasil!', message: 'Profil Toko berhasil diperbarui!' });
+      toast.success('Profil Toko berhasil diperbarui!', { title: 'Berhasil!' });
       fetchToko();
     } catch (err) {
-      setFeedback({ isOpen: true, type: 'error', title: 'Gagal Memperbarui Toko', message: err.message });
+      toast.error(err.message, { title: 'Gagal Memperbarui Toko' });
     }
   };
 
@@ -151,10 +151,10 @@ export default function OwnerPengaturanPage() {
       setUploading('logo');
       const dataUrl = await fileToDataUrl(file);
       await api.post('/owner/toko/logo', { logo_url: dataUrl });
-      setFeedback({ isOpen: true, type: 'success', title: 'Foto Toko Terupload', message: 'Foto toko berhasil disimpan.' });
+      toast.success('Foto toko berhasil disimpan.', { title: 'Foto Toko Terupload' });
       await fetchToko();
     } catch (err) {
-      setFeedback({ isOpen: true, type: 'error', title: 'Upload Gagal', message: err.response?.data?.pesan || err.message });
+      toast.error(err.response?.data?.pesan || err.message, { title: 'Upload Gagal' });
     } finally {
       setUploading('');
       if (logoInputRef.current) logoInputRef.current.value = '';
@@ -168,10 +168,10 @@ export default function OwnerPengaturanPage() {
       setUploading('qris');
       const dataUrl = await fileToDataUrl(file);
       await api.post('/owner/toko/qris', { qris_url: dataUrl });
-      setFeedback({ isOpen: true, type: 'success', title: 'QRIS Terupload', message: 'Gambar QRIS berhasil disimpan.' });
+      toast.success('Gambar QRIS berhasil disimpan.', { title: 'QRIS Terupload' });
       await fetchToko();
     } catch (err) {
-      setFeedback({ isOpen: true, type: 'error', title: 'Upload Gagal', message: err.response?.data?.pesan || err.message });
+      toast.error(err.response?.data?.pesan || err.message, { title: 'Upload Gagal' });
     } finally {
       setUploading('');
       if (qrisInputRef.current) qrisInputRef.current.value = '';
@@ -189,10 +189,10 @@ export default function OwnerPengaturanPage() {
         bank_no_rekening: payData.bankNoRekening,
         bank_atas_nama: payData.bankAtasNama,
       });
-      setFeedback({ isOpen: true, type: 'success', title: 'Berhasil!', message: 'Pengaturan pembayaran tersimpan.' });
+      toast.success('Pengaturan pembayaran tersimpan.', { title: 'Berhasil!' });
       fetchToko();
     } catch (err) {
-      setFeedback({ isOpen: true, type: 'error', title: 'Gagal Menyimpan', message: err.response?.data?.pesan || err.message });
+      toast.error(err.response?.data?.pesan || err.message, { title: 'Gagal Menyimpan' });
     }
   };
 
@@ -202,12 +202,12 @@ export default function OwnerPengaturanPage() {
     try {
       setIsSubmitting(true);
       await api.post('/owner/pengguna', kasirForm);
-      setFeedback({ isOpen: true, type: 'success', title: 'Kasir Berhasil Dibuat!', message: `Akun kasir untuk ${kasirForm.nama} (${kasirForm.email}) telah berhasil didaftarkan.` });
+      toast.success(`Akun kasir untuk ${kasirForm.nama} (${kasirForm.email}) telah berhasil didaftarkan.`, { title: 'Kasir Berhasil Dibuat!' });
       setIsModalOpen(false);
       setKasirForm({ nama: '', email: '', password: '' });
       fetchKasirList();
     } catch (err) {
-      setFeedback({ isOpen: true, type: 'error', title: 'Gagal Membuat Kasir', message: err.message });
+      toast.error(err.message, { title: 'Gagal Membuat Kasir' });
     } finally {
       setIsSubmitting(false);
     }
@@ -221,11 +221,11 @@ export default function OwnerPengaturanPage() {
     try {
       const nextStatus = !kasir.aktif;
       await api.put(`/owner/pengguna/${kasir.id}`, { aktif: nextStatus });
-      setFeedback({ isOpen: true, type: 'info', title: 'Status Diperbarui', message: `Akun kasir ${kasir.nama} telah ${nextStatus ? 'diaktifkan kembali' : 'dinonaktifkan'}.` });
+      toast.info(`Akun kasir ${kasir.nama} telah ${nextStatus ? 'diaktifkan kembali' : 'dinonaktifkan'}.`, { title: 'Status Diperbarui' });
       setConfirmToggle({ isOpen: false, kasir: null });
       fetchKasirList();
     } catch (err) {
-      setFeedback({ isOpen: true, type: 'error', title: 'Gagal Mengubah Status', message: err.message });
+      toast.error(err.message, { title: 'Gagal Mengubah Status' });
     }
   };
 
@@ -233,11 +233,11 @@ export default function OwnerPengaturanPage() {
     if (!confirmDelete.id) return;
     try {
       await api.delete(`/owner/pengguna/${confirmDelete.id}/permanen`);
-      setFeedback({ isOpen: true, type: 'success', title: 'Kasir Dihapus!', message: `Akun kasir "${confirmDelete.nama}" berhasil dihapus secara permanen.` });
+      toast.success(`Akun kasir "${confirmDelete.nama}" berhasil dihapus secara permanen.`, { title: 'Kasir Dihapus!' });
       setConfirmDelete({ isOpen: false, id: null, nama: '' });
       fetchKasirList();
     } catch (err) {
-      setFeedback({ isOpen: true, type: 'error', title: 'Gagal Menghapus Kasir', message: err.response?.data?.pesan || err.message });
+      toast.error(err.response?.data?.pesan || err.message, { title: 'Gagal Menghapus Kasir' });
     }
   };
 
@@ -442,15 +442,15 @@ export default function OwnerPengaturanPage() {
               const passLama = e.target.password_lama.value;
               const passBaru = e.target.password_baru.value;
               const konfirmPass = e.target.konfirm_password.value;
-              if (!passLama) return setFeedback({ isOpen: true, type: 'error', title: 'Validasi Gagal', message: 'Password lama wajib diisi!' });
-              if (!passBaru || passBaru.length < 8) return setFeedback({ isOpen: true, type: 'error', title: 'Validasi Gagal', message: 'Password baru minimal harus 8 karakter!' });
-              if (passBaru !== konfirmPass) return setFeedback({ isOpen: true, type: 'error', title: 'Validasi Gagal', message: 'Konfirmasi password baru tidak cocok!' });
+              if (!passLama) return toast.error('Password lama wajib diisi!', { title: 'Validasi Gagal' });
+              if (!passBaru || passBaru.length < 8) return toast.error('Password baru minimal harus 8 karakter!', { title: 'Validasi Gagal' });
+              if (passBaru !== konfirmPass) return toast.error('Konfirmasi password baru tidak cocok!', { title: 'Validasi Gagal' });
               try {
                 const res = await api.post('/auth/ganti-password', { old_password: passLama, new_password: passBaru });
-                setFeedback({ isOpen: true, type: 'success', title: 'Password Diperbarui!', message: res?.pesan || 'Password akun Anda berhasil diperbarui!' });
+                toast.success(res?.pesan || 'Password akun Anda berhasil diperbarui!', { title: 'Password Diperbarui!' });
                 e.target.reset();
               } catch (err) {
-                setFeedback({ isOpen: true, type: 'error', title: 'Gagal Ubah Password', message: err.response?.data?.pesan || err.message });
+                toast.error(err.response?.data?.pesan || err.message, { title: 'Gagal Ubah Password' });
               }
             }}
             className="space-y-3 text-xs"
@@ -496,17 +496,17 @@ export default function OwnerPengaturanPage() {
         <form
           onSubmit={async (e) => {
             e.preventDefault();
-            if (!resetPass || resetPass.length < 6) return setFeedback({ isOpen: true, type: 'error', title: 'Validasi Gagal', message: 'Password baru minimal 6 karakter!' });
-            if (resetPass !== resetKonfirm) return setFeedback({ isOpen: true, type: 'error', title: 'Validasi Gagal', message: 'Konfirmasi password tidak cocok!' });
+            if (!resetPass || resetPass.length < 6) return toast.error('Password baru minimal 6 karakter!', { title: 'Validasi Gagal' });
+            if (resetPass !== resetKonfirm) return toast.error('Konfirmasi password tidak cocok!', { title: 'Validasi Gagal' });
             setIsResetting(true);
             try {
               await api.put(`/owner/pengguna/${resetKasir.id}`, { password: resetPass });
-              setFeedback({ isOpen: true, type: 'success', title: 'Password Kasir Diperbarui!', message: `Password akun kasir "${resetKasir.nama}" telah berhasil diubah.` });
+              toast.success(`Password akun kasir "${resetKasir.nama}" telah berhasil diubah.`, { title: 'Password Kasir Diperbarui!' });
               setResetKasir({ isOpen: false, id: null, nama: '' });
               setResetPass('');
               setResetKonfirm('');
             } catch (err) {
-              setFeedback({ isOpen: true, type: 'error', title: 'Gagal Ubah Password', message: err.response?.data?.pesan || err.message });
+              toast.error(err.response?.data?.pesan || err.message, { title: 'Gagal Ubah Password' });
             } finally {
               setIsResetting(false);
             }
@@ -545,14 +545,7 @@ export default function OwnerPengaturanPage() {
         isDanger
       />
 
-      {/* Feedback Modal */}
-      <FeedbackModal
-        isOpen={feedback.isOpen}
-        onClose={() => setFeedback({ ...feedback, isOpen: false })}
-        type={feedback.type}
-        title={feedback.title}
-        message={feedback.message}
-      />
+
     </div>
   );
 }

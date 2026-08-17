@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '@/lib/api';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import {
   Zap, RefreshCw, CheckCircle2, AlertCircle, Loader2,
   TrendingUp, Target, Clock, Cpu, AlertTriangle, ExternalLink,
@@ -13,6 +14,7 @@ export default function TrainingPanel({ onTrainingComplete }) {
   const [trainError, setTrainError] = useState(null);
   const [kaggleUrl, setKaggleUrl] = useState(null);
   const [elapsed, setElapsed] = useState(0);
+  const [confirmTrainOpen, setConfirmTrainOpen] = useState(false);
   const pollRef = useRef(null);
   const startTimeRef = useRef(null);
   const timerRef = useRef(null);
@@ -74,8 +76,7 @@ export default function TrainingPanel({ onTrainingComplete }) {
   }, []);
 
   const handleTriggerTrain = async () => {
-    if (!confirm('Trigger training di Kaggle? GPU T4x2 aktif. Estimasi 30-40 menit.')) return;
-
+    setConfirmTrainOpen(false);
     setTrainStatus('running');
     setTrainResult(null);
     setTrainError(null);
@@ -124,7 +125,7 @@ export default function TrainingPanel({ onTrainingComplete }) {
           <p className="text-xs text-slate-400">Trigger training otomatis • Dataset dari HuggingFace • Export TFJS</p>
         </div>
         {trainStatus === 'idle' && (
-          <button onClick={handleTriggerTrain}
+          <button onClick={() => setConfirmTrainOpen(true)}
             className="px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-amber-500/20">
             <Zap className="w-4 h-4" /> Train Model
           </button>
@@ -292,6 +293,14 @@ export default function TrainingPanel({ onTrainingComplete }) {
           </div>
         )}
       </div>
+      <ConfirmModal
+        isOpen={confirmTrainOpen}
+        onClose={() => setConfirmTrainOpen(false)}
+        onConfirm={handleTriggerTrain}
+        title="Mulai Training Model?"
+        message="Training akan berjalan di Kaggle GPU dan diperkirakan membutuhkan 30–40 menit."
+        confirmText="Ya, Mulai Training"
+      />
     </div>
   );
 }

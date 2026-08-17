@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Store, Mail, Lock, Eye, EyeOff, ShieldCheck, LogIn, Headphones } from 'lucide-react';
-import FeedbackModal from '@/components/ui/FeedbackModal';
+import { toast } from '@/components/ui/ToastProvider';
 import Button from '@/components/ui/Button';
 import { useAuthStore } from '@/store/authStore';
 import { api } from '@/lib/api';
@@ -32,8 +32,6 @@ export default function LoginPage() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const [feedback, setFeedback] = useState({ isOpen: false, type: 'success', title: '', message: '' });
-
   useEffect(() => {
     initAuth();
   }, []);
@@ -54,11 +52,11 @@ export default function LoginPage() {
     try {
       setIsLoading(true);
       const userProfile = await login(email, password);
-      setFeedback({ isOpen: true, type: 'success', title: 'Login Berhasil!', message: `Selamat datang kembali, ${userProfile?.nama || 'Pengguna'}!` });
+      toast.success(`Selamat datang kembali, ${userProfile?.nama || 'Pengguna'}!`, { title: 'Login Berhasil!' });
       setTimeout(() => router.replace('/owner/dashboard'), 800);
     } catch (err) {
       setErrorMsg(err.message || 'Gagal login. Cek email & password Anda.');
-      setFeedback({ isOpen: true, type: 'error', title: 'Gagal Login', message: err.message || 'Email atau password tidak sesuai.' });
+      toast.error(err.message || 'Email atau password tidak sesuai.', { title: 'Gagal Login' });
     } finally {
       setIsLoading(false);
     }
@@ -80,7 +78,7 @@ export default function LoginPage() {
       });
       if (error) {
         setErrorMsg('Google login belum dikonfigurasi. ' + (error.message || ''));
-        setFeedback({ isOpen: true, type: 'error', title: 'Google Login Gagal', message: 'Provider Google belum aktif di Supabase. Hubungi developer untuk mengaktifkannya.' });
+        toast.error('Provider Google belum aktif di Supabase. Hubungi developer untuk mengaktifkannya.', { title: 'Google Login Gagal' });
       }
     } catch (err) {
       setErrorMsg(err?.message || 'Terjadi kesalahan saat memulai login Google.');
@@ -220,13 +218,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <FeedbackModal
-        isOpen={feedback.isOpen}
-        onClose={() => setFeedback({ ...feedback, isOpen: false })}
-        type={feedback.type}
-        title={feedback.title}
-        message={feedback.message}
-      />
+
     </div>
   );
 }

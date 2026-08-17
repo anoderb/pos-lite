@@ -16,7 +16,7 @@ import ModelBanner from './_components/ModelBanner';
 import TestingSandbox from './_components/TestingSandbox';
 import TrainingPanel from './_components/TrainingPanel';
 import ModelDetailModal from './_components/ModelDetailModal';
-import FeedbackModal from '@/components/ui/FeedbackModal';
+import { toast } from '@/components/ui/ToastProvider';
 import Skeleton from '@/components/ui/Skeleton';
 
 export default function AdminModelPage() {
@@ -25,10 +25,7 @@ export default function AdminModelPage() {
   const [activeModel, setActiveModel] = useState(null);
   const [testingModel, setTestingModel] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Feedback modal state (replaces native alert())
-  const [feedback, setFeedback] = useState({ isOpen: false, type: 'success', title: '', message: '' });
-  const showFeedback = (type, title, message) => setFeedback({ isOpen: true, type, title, message });
+  const showFeedback = (type, title, message) => toast[type](message, { title });
 
   // --- TFJS Hook ---
   const { model: loadedTfModel, classes, loading: isModelLoading, error: modelLoadError, loadModel, predict } = useTfjsModel();
@@ -557,14 +554,7 @@ export default function AdminModelPage() {
           </div>
         </div>
       )}
-      {/* Feedback Modal (replaces native alert) */}
-      <FeedbackModal
-        isOpen={feedback.isOpen}
-        onClose={() => setFeedback({ ...feedback, isOpen: false })}
-        type={feedback.type}
-        title={feedback.title}
-        message={feedback.message}
-      />
+
     </AdminLayout>
   );
 }

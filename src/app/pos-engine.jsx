@@ -32,7 +32,7 @@ import { getTf } from '@/lib/tf';
 import { cn, formatRupiah } from '@/lib/utils';
 import { api, getApiBaseUrl } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
-import FeedbackModal from '@/components/ui/FeedbackModal';
+import { toast } from '@/components/ui/ToastProvider';
 
 /* ─────────── Reusable Product Thumbnail ─────────── */
 function ProdukThumb({ nama, img, className }) {
@@ -90,8 +90,6 @@ export default function KasirPosPage() {
   const [barcodeDetectorSupported, setBarcodeDetectorSupported] = useState(null); // null=cek, true/false
   const [barcodeNotFound, setBarcodeNotFound] = useState(false);
   const [manualBarcode, setManualBarcode] = useState('');
-  const [koreksiToast, setKoreksiToast] = useState(false);
-  const [alreadyInCartToast, setAlreadyInCartToast] = useState(null);
   const [cameraActive, setCameraActive] = useState(false);
 
   // Video Ref for HTML5 Camera
@@ -114,9 +112,7 @@ export default function KasirPosPage() {
   const [kategoriList, setKategoriList] = useState([]);
   const [selectedKategori, setSelectedKategori] = useState('semua');
 
-  // Feedback modal state (replaces native alert())
-  const [feedback, setFeedback] = useState({ isOpen: false, type: 'success', title: '', message: '' });
-  const showFeedback = (type, title, message) => setFeedback({ isOpen: true, type, title, message });
+  const showFeedback = (type, title, message) => toast[type](message, { title });
 
   const { user, toko } = useAuthStore();
 
@@ -374,8 +370,7 @@ export default function KasirPosPage() {
     if (found) {
       const added = addToCart(found);
       if (!added) {
-        setAlreadyInCartToast({ nama: found.nama });
-        setTimeout(() => setAlreadyInCartToast(null), 2500);
+                  toast.info(`${found.nama} sudah di keranjang. Tambah qty manual.`, { title: 'Sudah di Keranjang' });
       }
       setTimeout(() => {
         setShowBarcodeScan(false);
@@ -426,7 +421,7 @@ export default function KasirPosPage() {
     // Blokir produk stok habis
     const maxStok = Number(produk.stok ?? 0);
     if (maxStok <= 0) {
-      setFeedback({ isOpen: true, type: 'info', title: 'Stok Habis', message: `${produk.nama} sedang habis. Silakan restok dulu.` });
+      toast.info(`${produk.nama} sedang habis. Silakan restok dulu.`, { title: 'Stok Habis' });
       return false;
     }
     let added = false;
@@ -453,7 +448,7 @@ export default function KasirPosPage() {
           const nextQty = i.qty + delta;
           // Tidak boleh melebihi stok tersedia
           if (nextQty > maxStok) {
-            setFeedback({ isOpen: true, type: 'info', title: 'Stok Tidak Mencukupi', message: `${i.nama} hanya tersisa ${maxStok} pcs di stok.` });
+            toast.warning(`${i.nama} hanya tersisa ${maxStok} pcs di stok.`, { title: 'Stok Tidak Mencukupi' });
             return i;
           }
           return { ...i, qty: Math.max(0, nextQty) };
@@ -577,8 +572,7 @@ export default function KasirPosPage() {
 
                 const added = addToCart(matchedProduct);
                 if (!added) {
-                  setAlreadyInCartToast({ nama: matchedProduct.nama });
-                  setTimeout(() => setAlreadyInCartToast(null), 2500);
+                  toast.info(`${matchedProduct.nama} sudah di keranjang. Tambah qty manual.`, { title: 'Sudah di Keranjang' });
                 }
 
                 // NEW: Kirim koreksi positive (AI benar) untuk continuous learning
@@ -591,8 +585,7 @@ export default function KasirPosPage() {
                     produk_dipilih_id: matchedProduct.id,
                     is_correct: true,
                   }).catch(() => {});
-                  setKoreksiToast(true);
-                  setTimeout(() => setKoreksiToast(false), 2000);
+                  toast.success('Koreksi tersimpan! Admin akan review untuk training AI.', { title: 'Koreksi Tersimpan' });
                 }
 
                 // Auto-resume scanning for the next item after 1.2 seconds (hands-free)
@@ -791,8 +784,7 @@ export default function KasirPosPage() {
   const handleSelectCandidate = (produk) => {
     const added = addToCart(produk);
     if (!added) {
-      setAlreadyInCartToast({ nama: produk.nama });
-      setTimeout(() => setAlreadyInCartToast(null), 2500);
+                  toast.info(`${produk.nama} sudah di keranjang. Tambah qty manual.`, { title: 'Sudah di Keranjang' });
     }
     setAiCandidates([]);
     isCooldownRef.current = false;
@@ -811,8 +803,7 @@ export default function KasirPosPage() {
         produk_dipilih_id: produk.id,
         is_correct: false,
       }).catch((e) => console.warn('Gagal menyimpan evaluasi koreksi:', e));
-      setKoreksiToast(true);
-      setTimeout(() => setKoreksiToast(false), 2000);
+                  toast.success('Koreksi tersimpan! Admin akan review untuk training AI.', { title: 'Koreksi Tersimpan' });
     }
   };
 
@@ -909,13 +900,6 @@ export default function KasirPosPage() {
         <div className="max-w-md mx-auto flex items-center justify-center min-h-screen">
           <p className="text-sm text-gray-500">Memeriksa shift...</p>
         </div>
-                <FeedbackModal
-          isOpen={feedback.isOpen}
-          onClose={() => setFeedback({ ...feedback, isOpen: false })}
-          type={feedback.type}
-          title={feedback.title}
-          message={feedback.message}
-        />
       </>
     );
   }
@@ -951,14 +935,6 @@ export default function KasirPosPage() {
         </div>
       </div>
 
-      {/* Feedback Modal (replaces native alert) */}
-      <FeedbackModal
-        isOpen={feedback.isOpen}
-        onClose={() => setFeedback({ ...feedback, isOpen: false })}
-        type={feedback.type}
-        title={feedback.title}
-        message={feedback.message}
-      />
       </>
     );
   }
@@ -1537,30 +1513,6 @@ export default function KasirPosPage() {
       {renderPaymentSheet()}
       {renderReceiptModal()}
 
-      {/* Koreksi Feedback Toast */}
-      {koreksiToast && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-emerald-500/30 animate-fade-in flex items-center gap-2">
-          <CheckCircle className="w-4 h-4" />
-          Koreksi tersimpan! Admin akan review untuk training AI.
-        </div>
-      )}
-
-      {/* Already In Cart Toast */}
-      {alreadyInCartToast && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-amber-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-amber-500/30 animate-fade-in flex items-center gap-2">
-          <Info className="w-4 h-4" />
-          {alreadyInCartToast.nama} sudah di keranjang. Tambah qty manual.
-        </div>
-      )}
-
-      {/* Feedback Modal (replaces native alert) */}
-      <FeedbackModal
-        isOpen={feedback.isOpen}
-        onClose={() => setFeedback({ ...feedback, isOpen: false })}
-        type={feedback.type}
-        title={feedback.title}
-        message={feedback.message}
-      />
     </div>
   );
 

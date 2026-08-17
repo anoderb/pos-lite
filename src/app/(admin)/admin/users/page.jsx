@@ -4,16 +4,13 @@ import React, { useEffect, useState } from 'react';
 import AdminLayout from '@/components/layout/admin/AdminLayout';
 import Skeleton from '@/components/ui/Skeleton';
 import { api } from '@/lib/api';
-import FeedbackModal from '@/components/ui/FeedbackModal';
+import { toast } from '@/components/ui/ToastProvider';
 import { Users, Search, Ban, CheckCircle, Store, Mail, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function AdminUsersPage() {
   const [tenants, setTenants] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Feedback modal state
-  const [feedback, setFeedback] = useState({ isOpen: false, type: 'success', title: '', message: '' });
-  const showFeedback = (type, title, message) => setFeedback({ isOpen: true, type, title, message });
+  const showFeedback = (type, title, message) => toast[type](message, { title });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTenant, setSelectedTenant] = useState(null);
   const [modalType, setModalType] = useState(null);
@@ -292,14 +289,7 @@ export default function AdminUsersPage() {
           </div>
         </div>
       )}
-      {/* Feedback Modal */}
-      <FeedbackModal
-        isOpen={feedback.isOpen}
-        onClose={() => setFeedback({ ...feedback, isOpen: false })}
-        type={feedback.type}
-        title={feedback.title}
-        message={feedback.message}
-      />
+
     </AdminLayout>
   );
 }

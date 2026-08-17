@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
-import FeedbackModal from '@/components/ui/FeedbackModal';
+import { toast } from '@/components/ui/ToastProvider';
 import { useAuthStore } from '@/store/authStore';
 
 function ProdukThumb({ nama, img, className = '' }) {
@@ -54,8 +54,7 @@ export default function OwnerStockAdjustmentPage() {
   const [showScan, setShowScan] = useState(false);
   const videoRef = useRef(null);
 
-  const [feedback, setFeedback] = useState({ isOpen: false, type: 'success', title: '', message: '' });
-  const showFeedback = (type, title, message) => setFeedback({ isOpen: true, type, title, message });
+  const showFeedback = (type, title, message) => toast[type](message, { title });
 
   const [formData, setFormData] = useState({
     produkNama: '',
@@ -531,14 +530,6 @@ export default function OwnerStockAdjustmentPage() {
           </div>
         </div>
       )}
-
-      <FeedbackModal
-        isOpen={feedback.isOpen}
-        onClose={() => setFeedback({ ...feedback, isOpen: false })}
-        type={feedback.type}
-        title={feedback.title}
-        message={feedback.message}
-      />
     </div>
   );
 }

@@ -29,6 +29,7 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import FeedbackModal from '@/components/ui/FeedbackModal';
+import { toast } from '@/components/ui/ToastProvider';
 import { api } from '@/lib/api';
 
 function ProdukThumb({ nama, img, className }) {
@@ -255,7 +256,7 @@ export default function OwnerProdukPage() {
     const MAX = 10 * 1024 * 1024; // 10MB
     const oversized = files.filter(f => f.size > MAX);
     if (oversized.length > 0) {
-      setFeedback({ isOpen: true, type: 'error', title: 'Foto Terlalu Besar', message: `Maksimal 10MB per foto. ${oversized.map(f => f.name).join(', ')} ditolak.` });
+      toast.error(`Maksimal 10MB per foto. ${oversized.map(f => f.name).join(', ')} ditolak.`, { title: 'Foto Terlalu Besar' });
     }
     files.filter(f => f.size <= MAX).forEach(file => {
       const reader = new FileReader();
@@ -327,13 +328,12 @@ export default function OwnerProdukPage() {
     setIsFormOpen(true);
   };
 
-  const [feedback, setFeedback] = useState({ isOpen: false, type: 'success', title: '', message: '' });
   const [confirmDelete, setConfirmDelete] = useState({ isOpen: false, id: null, nama: '' });
 
   const handleSave = async (e) => {
     e.preventDefault();
     if (!formData.nama.trim()) {
-      setFeedback({ isOpen: true, type: 'error', title: 'Validasi Gagal', message: 'Nama produk wajib diisi!' });
+      toast.error('Nama produk wajib diisi!', { title: 'Validasi Gagal' });
       return;
     }
     try {
@@ -350,15 +350,15 @@ export default function OwnerProdukPage() {
 
       if (editingId) {
         await api.put(`/owner/produk/${editingId}`, payload);
-        setFeedback({ isOpen: true, type: 'success', title: 'Berhasil!', message: 'Data produk berhasil diperbarui.' });
+        toast.success('Data produk berhasil diperbarui.', { title: 'Berhasil!' });
       } else {
         await api.post('/owner/produk', payload);
-        setFeedback({ isOpen: true, type: 'success', title: 'Berhasil!', message: 'Produk baru berhasil ditambahkan.' });
+        toast.success('Produk baru berhasil ditambahkan.', { title: 'Berhasil!' });
       }
       setIsFormOpen(false);
       fetchProduk();
     } catch (err) {
-      setFeedback({ isOpen: true, type: 'error', title: 'Gagal Menyimpan', message: err.response?.data?.pesan || err.message });
+      toast.error(err.response?.data?.pesan || err.message, { title: 'Gagal Menyimpan' });
     }
   };
 
@@ -366,18 +366,18 @@ export default function OwnerProdukPage() {
     if (!confirmDelete.id) return;
     try {
       await api.delete(`/owner/produk/${confirmDelete.id}`);
-      setFeedback({ isOpen: true, type: 'success', title: 'Berhasil!', message: 'Produk telah dinonaktifkan.' });
+      toast.success('Produk telah dinonaktifkan.', { title: 'Berhasil!' });
       setConfirmDelete({ isOpen: false, id: null, nama: '' });
       fetchProduk();
     } catch (err) {
-      setFeedback({ isOpen: true, type: 'error', title: 'Gagal Menghapus', message: err.response?.data?.pesan || err.message });
+      toast.error(err.response?.data?.pesan || err.message, { title: 'Gagal Menghapus' });
     }
   };
 
   // Export CSV dari data produk real (client-side)
   const handleExportCsv = () => {
     if (produkList.length === 0) {
-      setFeedback({ isOpen: true, type: 'info', title: 'Tidak Ada Data', message: 'Belum ada produk untuk diekspor.' });
+      toast.info('Belum ada produk untuk diekspor.', { title: 'Tidak Ada Data' });
       return;
     }
     const header = ['nama', 'barcode', 'kategori', 'stok', 'stok_minimum', 'harga_ecer'];
@@ -397,7 +397,7 @@ export default function OwnerProdukPage() {
     a.download = `produk-tokiva-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    setFeedback({ isOpen: true, type: 'success', title: 'Ekspor Berhasil', message: 'CSV produk telah diunduh.' });
+    toast.success('CSV produk telah diunduh.', { title: 'Ekspor Berhasil' });
   };
 
   const handleOpenHarga = () => {
@@ -432,12 +432,10 @@ export default function OwnerProdukPage() {
     setHargaModalOpen(false);
     setHargaEdit({});
     if (ok > 0) fetchProduk();
-    setFeedback({
-      isOpen: true,
-      type: fail === 0 ? 'success' : 'error',
-      title: fail === 0 ? 'Berhasil!' : 'Sebagian Gagal',
-      message: fail === 0 ? `${ok} harga produk diperbarui.` : `${ok} berhasil, ${fail} gagal diperbarui.`,
-    });
+    (fail === 0 ? toast.success : toast.error)(
+      fail === 0 ? `${ok} harga produk diperbarui.` : `${ok} berhasil, ${fail} gagal diperbarui.`,
+      { title: fail === 0 ? 'Berhasil!' : 'Sebagian Gagal' }
+    );
   };
 
   const handleDelete = (p) => {
@@ -1089,14 +1087,7 @@ export default function OwnerProdukPage() {
         isDanger
       />
 
-      {/* Notification Feedback Modal */}
-      <FeedbackModal
-        isOpen={feedback.isOpen}
-        onClose={() => setFeedback({ ...feedback, isOpen: false })}
-        type={feedback.type}
-        title={feedback.title}
-        message={feedback.message}
-      />
+
     </div>
   );
 }

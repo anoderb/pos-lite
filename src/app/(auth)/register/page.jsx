@@ -14,7 +14,7 @@ import {
   UserPlus,
   Headphones,
 } from 'lucide-react';
-import FeedbackModal from '@/components/ui/FeedbackModal';
+import { toast } from '@/components/ui/ToastProvider';
 import Button from '@/components/ui/Button';
 import { useAuthStore } from '@/store/authStore';
 import { api } from '@/lib/api';
@@ -40,7 +40,6 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [feedback, setFeedback] = useState({ isOpen: false, type: 'success', title: '', message: '' });
 
   useEffect(() => { initAuth(); }, []);
   useEffect(() => {
@@ -72,15 +71,15 @@ export default function RegisterPage() {
       // Auto-login setelah registrasi berhasil
       try {
         const userProfile = await login(form.email.trim(), form.password);
-        setFeedback({ isOpen: true, type: 'success', title: 'Akun Berhasil Dibuat!', message: `Selamat datang, ${userProfile?.nama || 'Pengguna'}! Toko Anda sudah siap digunakan.` });
+        toast.success(`Selamat datang, ${userProfile?.nama || 'Pengguna'}! Toko Anda sudah siap digunakan.`, { title: 'Akun Berhasil Dibuat!' });
         setTimeout(() => router.replace('/owner/dashboard'), 800);
       } catch {
-        setFeedback({ isOpen: true, type: 'success', title: 'Akun Berhasil Dibuat!', message: 'Silakan cek email Anda untuk verifikasi, lalu masuk dengan email dan password Anda.' });
+        toast.success('Silakan cek email Anda untuk verifikasi, lalu masuk dengan email dan password Anda.', { title: 'Akun Berhasil Dibuat!' });
         setTimeout(() => router.replace(`/verifikasi?email=${encodeURIComponent(form.email.trim())}`), 800);
       }
     } catch (err) {
       setErrorMsg(err?.response?.data?.pesan || err?.message || 'Gagal membuat akun. Coba lagi.');
-      setFeedback({ isOpen: true, type: 'error', title: 'Registrasi Gagal', message: err?.response?.data?.pesan || err?.message || 'Gagal membuat akun.' });
+      toast.error(err?.response?.data?.pesan || err?.message || 'Gagal membuat akun.', { title: 'Registrasi Gagal' });
     } finally {
       setIsLoading(false);
     }
@@ -102,7 +101,7 @@ export default function RegisterPage() {
       });
       if (error) {
         setErrorMsg('Google login belum dikonfigurasi. ' + (error.message || ''));
-        setFeedback({ isOpen: true, type: 'error', title: 'Google Gagal', message: 'Provider Google belum aktif di Supabase. Hubungi developer untuk mengaktifkannya.' });
+        toast.error('Provider Google belum aktif di Supabase. Hubungi developer untuk mengaktifkannya.', { title: 'Google Gagal' });
       }
     } catch (err) {
       setErrorMsg(err?.message || 'Terjadi kesalahan saat memulai Google.');
@@ -225,13 +224,7 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      <FeedbackModal
-        isOpen={feedback.isOpen}
-        onClose={() => setFeedback({ ...feedback, isOpen: false })}
-        type={feedback.type}
-        title={feedback.title}
-        message={feedback.message}
-      />
+
     </div>
   );
 }
