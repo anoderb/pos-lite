@@ -55,14 +55,14 @@ export default function OwnerBottomNav() {
       {isDrawerOpen && (
         <div
           onClick={() => setIsDrawerOpen(false)}
-          className="md:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity animate-fade-in"
+          className="lg:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity animate-fade-in"
         />
       )}
 
       {/* Drawer Menu Lainnya untuk Owner (Bottom Sheet - Full Edge to Edge) */}
       <div
         className={cn(
-          'md:hidden fixed left-0 right-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-2xl border-t border-gray-100 p-5 transition-transform duration-300 ease-out max-h-[85vh] overflow-y-auto pb-36',
+          'lg:hidden fixed left-0 right-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-2xl border-t border-gray-100 p-5 transition-transform duration-300 ease-out max-h-[85vh] overflow-y-auto pb-36',
           isDrawerOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'
         )}
       >
@@ -100,7 +100,7 @@ export default function OwnerBottomNav() {
 
       {/* Floating Bottom Nav Bar with Elevated Center Hero POS Button */}
       <div className={cn(
-        'md:hidden fixed bottom-3 left-3 right-3 z-50 transition-transform duration-300 ease-out',
+        'lg:hidden fixed bottom-3 left-3 right-3 z-50 transition-transform duration-300 ease-out',
         isHidden && 'translate-y-[120%]'
       )}>
         <div className="bg-white/95 backdrop-blur-md border border-gray-100 shadow-xl rounded-2xl px-2 py-1.5 flex items-center justify-around relative">

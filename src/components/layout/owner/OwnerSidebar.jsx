@@ -58,7 +58,7 @@ export default function OwnerSidebar() {
   ];
 
   return (
-    <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-100 min-h-screen sticky top-0 h-screen select-none">
+    <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-gray-100 min-h-screen sticky top-0 h-screen select-none">
       {/* Brand Header */}
       <div className="p-5 border-b border-gray-100 flex items-center gap-3">
         <div className="p-2.5 bg-[#16A34A] text-white rounded-2xl shadow-sm shrink-0">
