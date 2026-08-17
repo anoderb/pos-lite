@@ -152,6 +152,13 @@ export const useAuthStore = create((set, get) => ({
     });
   },
 
+  setToko: (toko) => {
+    if (typeof window !== 'undefined' && toko) {
+      localStorage.setItem('tokiva_toko_profile', JSON.stringify(toko));
+    }
+    set({ toko });
+  },
+
   // Helpers
   isAuthenticated: () => Boolean(get().user && get().token),
   isOwner: () => get().user?.role === 'owner',

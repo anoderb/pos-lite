@@ -37,8 +37,12 @@ export default function OwnerNavbar() {
     <header className="h-[68px] bg-white border-b border-gray-100 px-4 sm:px-5 sticky top-0 z-30 flex items-center justify-between">
       {/* Brand Header Owner */}
       <div className="flex items-center space-x-2">
-        <div className="w-10 h-10 bg-[#0CAF60] text-white rounded-xl shadow-sm flex items-center justify-center">
-          <Store className="w-[18px] h-[18px]" />
+        <div className="w-10 h-10 bg-[#E8FAF0] rounded-xl shadow-sm flex items-center justify-center overflow-hidden">
+          {toko?.logo_url ? (
+            <img src={toko.logo_url} alt={toko?.nama || 'Logo toko'} className="w-full h-full object-cover" />
+          ) : (
+            <Store className="w-[18px] h-[18px] text-[#0CAF60]" />
+          )}
         </div>
         <div>
           <h1 className="text-[16px] font-semibold leading-5 text-gray-900 truncate">

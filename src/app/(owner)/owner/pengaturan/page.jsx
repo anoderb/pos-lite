@@ -27,6 +27,13 @@ import FeedbackModal from '@/components/ui/FeedbackModal';
 import { useAuthStore } from '@/store/authStore';
 import { api } from '@/lib/api';
 
+const fileToDataUrl = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = reject;
+  reader.readAsDataURL(file);
+});
+
 const TABS = [
   { id: 'toko', label: 'Profil & Toko', icon: Store },
   { id: 'kasir', label: 'Kasir Staf', icon: UserCheck },
@@ -36,7 +43,7 @@ const TABS = [
 ];
 
 export default function OwnerPengaturanPage() {
-  const { toko } = useAuthStore();
+  const { toko, setToko } = useAuthStore();
   const [activeTab, setActiveTab] = useState('toko');
   const [stafList, setStafList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -88,6 +95,7 @@ export default function OwnerPengaturanPage() {
       const d = res?.data || res;
       if (d) {
         setTokoServer(d);
+        setToko(d);
         setTokoData({
           nama: d.nama || toko?.nama || APP_NAME,
           alamat: d.alamat || '',
@@ -141,9 +149,8 @@ export default function OwnerPengaturanPage() {
     if (!file) return;
     try {
       setUploading('logo');
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await api.post('/owner/toko/logo', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const dataUrl = await fileToDataUrl(file);
+      await api.post('/owner/toko/logo', { logo_url: dataUrl });
       setFeedback({ isOpen: true, type: 'success', title: 'Foto Toko Terupload', message: 'Foto toko berhasil disimpan.' });
       await fetchToko();
     } catch (err) {
@@ -159,9 +166,8 @@ export default function OwnerPengaturanPage() {
     if (!file) return;
     try {
       setUploading('qris');
-      const fd = new FormData();
-      fd.append('file', file);
-      await api.post('/owner/toko/qris', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const dataUrl = await fileToDataUrl(file);
+      await api.post('/owner/toko/qris', { qris_url: dataUrl });
       setFeedback({ isOpen: true, type: 'success', title: 'QRIS Terupload', message: 'Gambar QRIS berhasil disimpan.' });
       await fetchToko();
     } catch (err) {
