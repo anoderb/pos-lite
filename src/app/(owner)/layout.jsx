@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/authStore';
 
 export default function OwnerRouteGroupLayout({ children }) {
   const router = useRouter();
-  const { initAuth, user, token, isInitialized } = useAuthStore();
+  const { initAuth, user, isInitialized } = useAuthStore();
 
   useEffect(() => {
     initAuth();
@@ -16,13 +16,13 @@ export default function OwnerRouteGroupLayout({ children }) {
 
   useEffect(() => {
     if (isInitialized) {
-      if (!user || !token) {
+      if (!user) {
         router.replace('/login');
       } else if (user.role !== 'owner') {
         router.replace('/login');
       }
     }
-  }, [isInitialized, user, token, router]);
+  }, [isInitialized, user, router]);
 
   if (!isInitialized) {
     // Skeleton layout langsung — gak nunggu auth, LCP lebih cepat

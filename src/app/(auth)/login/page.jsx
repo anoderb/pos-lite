@@ -23,7 +23,7 @@ function GoogleIcon() {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, initAuth, user, token } = useAuthStore();
+  const { login, initAuth, user } = useAuthStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,10 +37,10 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    if (user && token) {
-      router.replace('/owner/dashboard');
-    }
-  }, [user, token, router]);
+      if (user) {
+        router.replace('/owner/dashboard');
+      }
+    }, [user, router]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

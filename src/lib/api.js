@@ -1,35 +1,13 @@
 import axios from 'axios';
 
-// Dynamic API base URL.
-// Priority: NEXT_PUBLIC_API_URL env → deployed hostname convention → localhost dev.
-function getApiBaseUrl() {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    const configuredUrl = process.env.NEXT_PUBLIC_API_URL;
-    // Keep local FE/BE on same host name so HttpOnly refresh cookies are sent.
-    // `localhost` and `127.0.0.1` are different cookie hosts.
-    if (
-      typeof window !== 'undefined' &&
-      window.location.hostname === 'localhost' &&
-      configuredUrl.startsWith('http://127.0.0.1:5000')
-    ) {
-      return configuredUrl.replace('http://127.0.0.1:5000', 'http://localhost:5000');
-    }
-    return configuredUrl;
-  }
-  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    // Deployed: assume api.<tld> subdomain next to the app host.
-    const host = window.location.hostname;
-    const parts = host.split('.');
-    const domain = parts.slice(-2).join('.');
-    return `https://api.${domain}/api`;
-  }
-  return 'http://127.0.0.1:5000/api';
+// BE origin for TFJS model URLs. MUST be set in .env.
+export function getApiBaseUrl() {
+  return process.env.NEXT_PUBLIC_API_URL || '';
 }
 
-// Exported for callers that need the resolved origin (e.g. dev model URL rewrite).
-export { getApiBaseUrl };
-
-const API_BASE_URL = getApiBaseUrl();
+// Next.js route handler proxy — browser → /api/... → api.tokiva.biz.id
+// Cookie httpOnly dikelola server-side. JWT gak kelihatan di Network tab.
+const API_BASE_URL = '/api';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -39,44 +17,17 @@ export const api = axios.create({
   },
 });
 
-// Auto Inject JWT Token if available in localStorage (isolated by path context)
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const isAdminPath = window.location.pathname.startsWith('/admin');
-    const token = isAdminPath
-      ? localStorage.getItem('tokiva_admin_token')
-      : localStorage.getItem('tokiva_jwt_token');
+// No request interceptor needed — JWT managed via httpOnly cookie
 
-    if (token && !config.headers.Authorization) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-  }
-  return config;
-});
-
-// Safe Response Interceptor (Auto Clear Stale Session on 401 Unauthorized)
+// Response interceptor: redirect ke login on 401, dispatch event on 429
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
     if (typeof window !== 'undefined' && error.response?.status === 401) {
       const reqUrl = error.config?.url || '';
-
-      // Ignore login endpoint 401 errors so login form shows error message instead of reloading
-      if (!reqUrl.includes('/login')) {
-        const isAdminPath = window.location.pathname.startsWith('/admin');
-        if (isAdminPath) {
-          localStorage.removeItem('tokiva_admin_token');
-          localStorage.removeItem('tokiva_admin_profile');
-          if (!window.location.pathname.startsWith('/admin/login')) {
-            window.location.href = '/admin/login';
-          }
-        } else {
-          localStorage.removeItem('tokiva_jwt_token');
-          localStorage.removeItem('tokiva_user_profile');
-          localStorage.removeItem('tokiva_toko_profile');
-          if (!window.location.pathname.startsWith('/login')) {
-            window.location.href = '/login';
-          }
+      if (!reqUrl.includes('/login') && !reqUrl.includes('/auth/login')) {
+        if (!window.location.pathname.startsWith('/login')) {
+          window.location.href = '/login';
         }
       }
     }
