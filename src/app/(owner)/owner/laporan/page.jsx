@@ -92,7 +92,6 @@ export default function OwnerLaporanPage() {
 
   useEffect(() => { fetchRingkasan(); }, [rentang]);
 
-  // Rentang tanggal untuk export (GMT+7, sama pattern BE)
   const rentangTanggal = () => {
     const O = 7 * 3600 * 1000;
     const local = new Date(Date.now() + O);
@@ -187,19 +186,20 @@ export default function OwnerLaporanPage() {
   ];
 
   return (
-    <div className="max-w-[430px] mx-auto space-y-4 pb-24 text-[#10233E]">
+    <div className="max-w-[430px] lg:max-w-none mx-auto space-y-4 lg:space-y-5 pb-24 lg:pb-8 text-[#10233E]">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-[20px] p-4 bg-gradient-to-br from-[#E8FAF0] via-white to-[#FFF8D9] shadow-[0_2px_10px_rgba(16,35,62,.05)]">
-        <div className="relative z-10 max-w-[64%]">
+      <div className="relative overflow-hidden rounded-[20px] lg:rounded-[22px] p-4 lg:p-6 bg-gradient-to-br from-[#E8FAF0] via-white to-[#FFF8D9] shadow-[0_2px_10px_rgba(16,35,62,.05)]">
+        <div className="relative z-10 max-w-[64%] lg:max-w-[58%]">
           <p className="text-[10px] font-normal text-[#68758A]">Dashboard &gt; Laporan Keuangan</p>
-          <h1 className="text-base font-semibold leading-6 mt-1">Laporan Keuangan & Penjualan</h1>
-          <p className="text-[10px] font-normal text-[#68758A] leading-4 mt-1">Ringkasan performa keuangan dan penjualan toko Anda.</p>
+          <h1 className="text-base lg:text-xl font-semibold leading-6 lg:leading-7 mt-1">Laporan Keuangan & Penjualan</h1>
+          <p className="text-[10px] lg:text-xs font-normal text-[#68758A] leading-4 mt-1">Ringkasan performa keuangan dan penjualan toko Anda.</p>
         </div>
-        <img src="/assets/tokiva-dashboard/img-laporan-3d.png" alt="Laporan 3D" className="absolute right-1 bottom-0 w-[40%] h-[96%] object-contain object-right-bottom" />
+        <img src="/assets/tokiva-dashboard/img-laporan-3d.png" alt="Laporan 3D" className="absolute right-1 bottom-0 w-[40%] lg:w-[30%] h-[96%] object-contain object-right-bottom" />
       </div>
 
       {/* Export Row */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="lg:flex lg:items-center lg:justify-between lg:gap-4">
+        <div className="grid grid-cols-2 gap-2 lg:flex lg:gap-2.5">
         <button
           onClick={handleExportPdf}
           className="flex items-center gap-2 p-3 rounded-[16px] bg-white shadow-sm border border-gray-50 hover:bg-gray-50 active:scale-[0.98] transition-all"
@@ -221,26 +221,27 @@ export default function OwnerLaporanPage() {
             <span className="block text-[9px] font-normal text-[#68758A]">{exporting === 'csv' ? 'Menyiapkan...' : 'Unduh CSV'}</span>
           </span>
         </button>
-      </div>
+        </div>
 
-      {/* Rentang Filter */}
-      <div className="flex gap-1.5 overflow-x-auto hide-scrollbar overscroll-x-contain">
-        {RENTANG.map(r => (
-          <button
-            key={r.id}
-            onClick={() => setRentang(r.id)}
-            className={cn(
-              'shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all',
-              rentang === r.id ? 'bg-[#0CAF60] text-white shadow-sm' : 'bg-white text-[#68758A] shadow-sm hover:bg-[#E8FAF0]'
-            )}
-          >
-            {r.label}
-          </button>
-        ))}
+        {/* Rentang Filter */}
+        <div className="mt-3 lg:mt-0 flex gap-1.5 overflow-x-auto hide-scrollbar overscroll-x-contain">
+          {RENTANG.map(r => (
+            <button
+              key={r.id}
+              onClick={() => setRentang(r.id)}
+              className={cn(
+                'shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all',
+                rentang === r.id ? 'bg-[#0CAF60] text-white shadow-sm' : 'bg-white text-[#68758A] shadow-sm hover:bg-[#E8FAF0]'
+              )}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3">
         {kpi.map(k => {
           const Icon = k.icon;
           return (
@@ -266,8 +267,10 @@ export default function OwnerLaporanPage() {
         })}
       </div>
 
+      {/* Income Statement + Metode Pembayaran (side-by-side desktop) */}
+      <div className="lg:grid lg:grid-cols-5 lg:gap-4 lg:items-start">
       {/* Income Statement */}
-      <section className="rounded-[18px] bg-white p-4 shadow-sm border border-gray-50">
+      <section className="rounded-[18px] bg-white p-4 shadow-sm border border-gray-50 lg:col-span-3">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-medium leading-5">Laporan Laba Rugi</h2>
           <span className="text-[10px] font-normal text-[#68758A]">Periode: {data?.label_periode || rentang}</span>
@@ -301,7 +304,7 @@ export default function OwnerLaporanPage() {
       </section>
 
       {/* Metode Pembayaran */}
-      <section className="rounded-[18px] bg-white p-4 shadow-sm border border-gray-50">
+      <section className="rounded-[18px] bg-white p-4 shadow-sm border border-gray-50 mt-4 lg:mt-0 lg:col-span-2">
         <h2 className="text-sm font-medium leading-5 mb-3">Perincian Metode Pembayaran</h2>
         {isLoading ? (
           <div className="space-y-2">
@@ -337,6 +340,8 @@ export default function OwnerLaporanPage() {
           <p className="text-[11px] font-normal text-[#68758A] text-center py-6">Belum ada transaksi pada periode ini.</p>
         )}
       </section>
+      </div>
+
     </div>
   );
 }

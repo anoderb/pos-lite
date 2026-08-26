@@ -26,10 +26,7 @@ export default function AdminUsersPage() {
   const fetchTenants = async () => {
     setIsLoading(true);
     try {
-      const savedToken = localStorage.getItem('tokiva_admin_token') || localStorage.getItem('tokiva_jwt_token');
-      const res = await api.get('/admin/users', {
-        headers: { Authorization: `Bearer ${savedToken}` },
-      });
+      const res = await api.get('/admin/users');
       if (res.berhasil && res.data) {
         setTenants(res.data);
       }
@@ -46,10 +43,7 @@ export default function AdminUsersPage() {
     const endpoint = `/admin/users/${selectedTenant.id}/${isSuspend ? 'suspend' : 'aktifkan'}`;
 
     try {
-      const savedToken = localStorage.getItem('tokiva_admin_token') || localStorage.getItem('tokiva_jwt_token');
-      await api.put(endpoint, {}, {
-        headers: { Authorization: `Bearer ${savedToken}` },
-      });
+      await api.put(endpoint, {});
       fetchTenants();
     } catch (err) {
       showFeedback('error', 'Gagal', `Gagal ${isSuspend ? 'suspend' : 'mengaktifkan'} toko: ${err.message}`);

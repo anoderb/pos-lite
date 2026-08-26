@@ -41,8 +41,8 @@ export default function OwnerBottomNav() {
       color: 'bg-emerald-50 text-[#16A34A]',
     },
     {
-      label: 'Pengaturan Toko',
-      desc: 'Profil toko & kelola staf kasir',
+      label: 'Pengaturan',
+      desc: 'Profil toko & pembayaran',
       href: '/owner/pengaturan',
       icon: Settings,
       color: 'bg-amber-50 text-amber-600',

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import Skeleton from '@/components/ui/Skeleton';
 import { toast } from '@/components/ui/ToastProvider';
 import { useAuthStore } from '@/store/authStore';
 
@@ -47,6 +48,7 @@ export default function OwnerStockAdjustmentPage() {
   const { user } = useAuthStore();
   const [logList, setLogList] = useState([]);
   const [produkList, setProdukList] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterTipe, setFilterTipe] = useState('semua'); // semua | tambah | kurang
   const [filterOpen, setFilterOpen] = useState(false);
@@ -74,14 +76,16 @@ export default function OwnerStockAdjustmentPage() {
   ).slice(0, 8);
 
   const fetchData = () => {
-    api.get('/owner/produk').then(res => {
-      const data = res?.berhasil ? res.data : (Array.isArray(res?.data) ? res.data : []);
-      if (Array.isArray(data)) setProdukList(data);
-    }).catch(() => {});
-    api.get('/owner/stock-adjustment').then(res => {
-      const data = res?.berhasil ? res.data : (Array.isArray(res?.data) ? res.data : []);
-      if (Array.isArray(data)) setLogList(data);
-    }).catch(() => {});
+    setIsLoading(true);
+    Promise.all([
+      api.get('/owner/produk').catch(() => null),
+      api.get('/owner/stock-adjustment').catch(() => null),
+    ]).then(([produkRes, logRes]) => {
+      const produkData = produkRes?.berhasil ? produkRes.data : (Array.isArray(produkRes?.data) ? produkRes.data : []);
+      if (Array.isArray(produkData)) setProdukList(produkData);
+      const logData = logRes?.berhasil ? logRes.data : (Array.isArray(logRes?.data) ? logRes.data : []);
+      if (Array.isArray(logData)) setLogList(logData);
+    }).finally(() => setIsLoading(false));
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -197,19 +201,19 @@ export default function OwnerStockAdjustmentPage() {
   const scrollToRiwayat = () => riwayatRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   return (
-    <div className="max-w-[430px] mx-auto space-y-4 pb-24 text-[#10233E]">
+    <div className="max-w-[430px] lg:max-w-none mx-auto space-y-4 lg:space-y-5 pb-24 lg:pb-8 text-[#10233E]">
       {/* Breadcrumb + Banner */}
-      <div className="relative overflow-hidden rounded-[20px] p-4 bg-gradient-to-br from-[#E8FAF0] via-white to-[#FFF8D9] shadow-[0_2px_10px_rgba(16,35,62,.05)]">
-        <div className="relative z-10 max-w-[60%]">
+      <div className="relative overflow-hidden rounded-[20px] lg:rounded-[22px] p-4 lg:p-6 bg-gradient-to-br from-[#E8FAF0] via-white to-[#FFF8D9] shadow-[0_2px_10px_rgba(16,35,62,.05)]">
+        <div className="relative z-10 max-w-[60%] lg:max-w-[58%]">
           <p className="text-[10px] font-normal text-[#68758A]">Dashboard &gt; Tambah / Adjust Stok</p>
-          <h1 className="text-base font-semibold leading-6 mt-1">Tambah / Adjust Stok</h1>
-          <p className="text-[10px] font-normal text-[#68758A] leading-4 mt-1">Kelola stok barang dengan mudah. Tambah, kurang, dan catat riwayat secara manual.</p>
+          <h1 className="text-base lg:text-xl font-semibold leading-6 lg:leading-7 mt-1">Tambah / Adjust Stok</h1>
+          <p className="text-[10px] lg:text-xs font-normal text-[#68758A] leading-4 mt-1">Kelola stok barang dengan mudah. Tambah, kurang, dan catat riwayat secara manual.</p>
         </div>
-        <img src="/assets/tokiva-dashboard/img-stock-3d.png" alt="Stok 3D" className="absolute right-1 bottom-0 w-[44%] h-[96%] object-contain object-right-bottom" />
+        <img src="/assets/tokiva-dashboard/img-stock-3d.png" alt="Stok 3D" className="absolute right-1 bottom-0 w-[44%] lg:w-[28%] h-[96%] object-contain object-right-bottom" />
       </div>
 
       {/* Action Bar Hijau */}
-      <div className="rounded-[18px] bg-[#0CAF60] p-2.5 flex items-center gap-2 shadow-sm">
+      <div className="rounded-[18px] bg-[#0CAF60] p-2.5 flex items-center gap-2 shadow-sm lg:max-w-2xl">
         <button
           onClick={() => openForm('tambah')}
           className="flex-1 flex items-center gap-2 p-2.5 rounded-xl bg-white/95 hover:bg-white active:scale-[0.98] transition-all"
@@ -241,7 +245,7 @@ export default function OwnerStockAdjustmentPage() {
       </div>
 
       {/* 4 Kartu Fitur */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-3">
         <button onClick={() => openForm('tambah')} className="p-3 rounded-[16px] bg-white shadow-sm border border-gray-50 text-left hover:bg-gray-50 active:scale-[0.98] transition-all">
           <span className="w-8 h-8 rounded-lg bg-[#EAF3FF] text-blue-600 flex items-center justify-center"><ClipboardList className="w-4 h-4" /></span>
           <p className="text-[11px] font-medium text-[#10233E] mt-2">Penyesuaian Stok</p>
@@ -308,16 +312,30 @@ export default function OwnerStockAdjustmentPage() {
       <div ref={riwayatRef}>
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-medium leading-5">Riwayat Penyesuaian Terbaru</h2>
-          <span className="text-[10px] font-medium text-[#0CAF60]">{filteredLogs.length} log</span>
+          {!isLoading && <span className="text-[10px] font-medium text-[#0CAF60]">{filteredLogs.length} log</span>}
         </div>
-        {filteredLogs.length === 0 ? (
+        {isLoading ? (
+          <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-x-3 lg:gap-y-2 lg:space-y-0">
+            {[0, 1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="flex items-center gap-3 bg-white rounded-[16px] p-3 shadow-sm border border-gray-50">
+                <Skeleton className="w-10 h-10 rounded-xl shrink-0" />
+                <div className="flex-1 space-y-1.5 min-w-0">
+                  <Skeleton className="h-3 w-28" />
+                  <Skeleton className="h-2.5 w-20" />
+                  <Skeleton className="h-2 w-24" />
+                </div>
+                <Skeleton className="h-3 w-12 shrink-0" />
+              </div>
+            ))}
+          </div>
+        ) : filteredLogs.length === 0 ? (
           <div className="bg-white rounded-[16px] border border-gray-50 p-8 text-center shadow-sm">
             <div className="w-12 h-12 bg-[#E8FAF0] rounded-full flex items-center justify-center mx-auto mb-2 text-[#0CAF60]"><Package className="w-6 h-6" /></div>
             <p className="text-[13px] font-medium text-[#10233E]">Belum ada riwayat</p>
             <p className="text-[10px] font-normal text-[#68758A] mt-0.5">Penyesuaian stok yang Anda lakukan akan tampil di sini.</p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-x-3 lg:gap-y-2 lg:space-y-0">
             {filteredLogs.slice(0, 15).map((log, idx) => {
               const tambah = log.tipe === 'tambah';
               return (
@@ -356,34 +374,47 @@ export default function OwnerStockAdjustmentPage() {
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsFormOpen(false)} />
       </div>
       <div className={cn(
-        'fixed inset-x-0 bottom-0 z-40 bg-white rounded-t-[24px] shadow-2xl flex flex-col max-h-[92vh] transition-transform duration-300 ease-out',
-        isFormOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'
+        'fixed z-40 bg-white shadow-2xl flex flex-col inset-x-0 bottom-0 max-h-[92vh] rounded-t-[24px] lg:rounded-none lg:rounded-l-[28px] lg:inset-x-auto lg:inset-y-0 lg:right-0 lg:max-h-none lg:w-[480px] transition-transform duration-300 ease-out',
+        isFormOpen
+          ? 'translate-y-0 lg:translate-y-0 lg:translate-x-0'
+          : 'translate-y-full pointer-events-none lg:translate-y-0 lg:translate-x-full'
       )}>
-        <div className="w-10 h-1.5 bg-gray-200 rounded-full mx-auto mt-2.5 shrink-0" />
-        <div className="flex items-center justify-between px-4 pt-2 pb-3 border-b border-gray-50 shrink-0">
+        <div className="w-10 h-1.5 bg-gray-200 rounded-full mx-auto mt-2.5 shrink-0 lg:hidden" />
+        <div className="flex items-center justify-between px-4 lg:px-5 pt-2 pb-3 border-b border-gray-50 shrink-0">
           <div>
-            <h2 className="text-[15px] font-semibold leading-5 text-[#10233E]">{formData.tipe === 'tambah' ? 'Tambah Stok' : 'Kurangi Stok'}</h2>
-            <p className="text-[10px] font-normal text-[#68758A]">Catat penyesuaian stok manual</p>
+            <h2 className="text-[15px] lg:text-lg font-semibold leading-5 text-[#10233E]">{formData.tipe === 'tambah' ? 'Tambah Stok' : 'Kurangi Stok'}</h2>
+            <p className="text-[10px] lg:text-xs font-normal text-[#68758A]">Catat penyesuaian stok manual</p>
           </div>
           <button onClick={() => setIsFormOpen(false)} className="p-2 -mr-1 text-[#68758A] hover:bg-gray-100 rounded-xl active:scale-95 transition-all"><X className="w-4 h-4" /></button>
         </div>
 
-        <form onSubmit={handleSave} className="flex-1 overflow-y-auto hide-scrollbar px-4 py-3 space-y-3">
+        <form onSubmit={handleSave} className="flex-1 overflow-y-auto hide-scrollbar px-4 lg:px-5 py-3 lg:py-4 space-y-3">
           {/* Pilih Produk (searchable combobox) */}
           <div className="space-y-1 relative">
             <label className="text-[11px] font-medium text-[#10233E]">Pilih Produk</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#68758A]" />
-              <input
-                type="text"
-                value={produkQuery}
-                onChange={e => { setProdukQuery(e.target.value); setFormData({ ...formData, produkNama: e.target.value }); }}
-                onFocus={() => setProdukFocused(true)}
-                onBlur={() => setTimeout(() => setProdukFocused(false), 150)}
-                placeholder="Ketik nama produk..."
-                required
-                className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-normal text-[#10233E] placeholder:text-[#68758A] outline-none focus:border-[#0CAF60]"
-              />
+            <div className="flex gap-1.5">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#68758A]" />
+                <input
+                  type="text"
+                  value={produkQuery}
+                  onChange={e => { setProdukQuery(e.target.value); setFormData({ ...formData, produkNama: e.target.value }); }}
+                  onFocus={() => setProdukFocused(true)}
+                  onBlur={() => setTimeout(() => setProdukFocused(false), 150)}
+                  placeholder="Ketik nama produk..."
+                  required
+                  className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-normal text-[#10233E] placeholder:text-[#68758A] outline-none focus:border-[#0CAF60]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowScan(true)}
+                aria-label="Scan barcode"
+                className="w-10 shrink-0 rounded-xl border border-gray-200 bg-white text-[#68758A] hover:text-[#0CAF60] hover:border-[#0CAF60] flex items-center justify-center active:scale-95 transition-all"
+              >
+                <ScanBarcode className="w-4 h-4" />
+              </button>
+            </div>
               {produkFocused && produkQuery && produkSuggestions.length > 0 && (
                 <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden max-h-44 overflow-y-auto hide-scrollbar">
                   {produkSuggestions.map(p => (
@@ -401,7 +432,6 @@ export default function OwnerStockAdjustmentPage() {
                   ))}
                 </div>
               )}
-            </div>
           </div>
 
           {/* Tipe Toggle */}
@@ -412,7 +442,7 @@ export default function OwnerStockAdjustmentPage() {
                 type="button"
                 onClick={() => setFormData({ ...formData, tipe: t })}
                 className={cn(
-                  'flex-1 py-2 rounded-lg text-xs font-medium transition-all',
+                  'flex-1 py-2.5 rounded-lg text-xs font-medium transition-all',
                   formData.tipe === t ? (t === 'tambah' ? 'bg-[#0CAF60] text-white shadow-sm' : 'bg-[#D94850] text-white shadow-sm') : 'text-[#68758A]'
                 )}
               >
@@ -429,7 +459,7 @@ export default function OwnerStockAdjustmentPage() {
                 type="button"
                 onClick={() => setFormData({ ...formData, unitMode: id })}
                 className={cn(
-                  'flex-1 py-2 rounded-lg text-[11px] font-medium transition-all',
+                  'flex-1 py-2.5 rounded-lg text-[11px] font-medium transition-all',
                   formData.unitMode === id ? 'bg-white text-[#10233E] shadow-sm' : 'text-[#68758A]'
                 )}
               >

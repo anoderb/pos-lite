@@ -62,8 +62,6 @@ export default function AdminModelPage() {
   const itemsPerPage = 5;
 
   // --- Token helper ---
-  const getToken = () => localStorage.getItem('tokiva_admin_token') || localStorage.getItem('tokiva_jwt_token');
-
   // --- Webcam inference callback ---
   const handleFrame = useCallback(async (videoEl) => {
     const result = await predict(videoEl);
@@ -85,8 +83,7 @@ export default function AdminModelPage() {
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
-      const token = getToken();
-      const modelRes = await api.get('/admin/model', { headers: { Authorization: `Bearer ${token}` } });
+      const modelRes = await api.get('/admin/model');
 
       if (modelRes?.berhasil && Array.isArray(modelRes.data)) {
         setModels(modelRes.data);
@@ -161,7 +158,7 @@ export default function AdminModelPage() {
   const handleSaveThreshold = async () => {
     if (!activeModel) return;
     try {
-      await api.put(`/admin/model/${activeModel.id}/threshold`, { confidence_threshold: threshold }, { headers: { Authorization: `Bearer ${getToken()}` } });
+      await api.put(`/admin/model/${activeModel.id}/threshold`, { confidence_threshold: threshold });
       showFeedback('success', 'Threshold Disimpan', `Confidence threshold berhasil diperbarui ke ${(threshold * 100).toFixed(0)}%!`);
     } catch (err) {
       showFeedback('error', 'Gagal Simpan Threshold', err.response?.data?.pesan || err.message);
@@ -174,7 +171,7 @@ export default function AdminModelPage() {
     try {
       const body = {};
       if (versiOverride.trim()) body.versi_override = versiOverride.trim();
-      await api.put(`/admin/model/${deployModelTarget.id}/aktifkan`, body, { headers: { Authorization: `Bearer ${getToken()}` } });
+      await api.put(`/admin/model/${deployModelTarget.id}/aktifkan`, body);
       showFeedback('success', 'Deploy Berhasil', `Model ${deployModelTarget.versi} BERHASIL DITERAPKAN KE SELURUH SISTEM POS! 🚀`);
     } catch (err) {
       showFeedback('error', 'Gagal Deploy', err.response?.data?.pesan || err.message);
@@ -188,7 +185,7 @@ export default function AdminModelPage() {
   const handleDeleteModel = async () => {
     if (!deleteModelTarget) return;
     try {
-      await api.delete(`/admin/model/${deleteModelTarget.id}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      await api.delete(`/admin/model/${deleteModelTarget.id}`);
       showFeedback('success', 'Model Dihapus', `Model ${deleteModelTarget.versi} berhasil dihapus dari database!`);
     } catch (err) {
       showFeedback('error', 'Gagal Hapus Model', err.response?.data?.pesan || err.message);
@@ -202,7 +199,6 @@ export default function AdminModelPage() {
     e.preventDefault();
     if (!versi || !namaModel) return showFeedback('info', 'Perhatian', 'Versi dan Nama Model wajib diisi');
     try {
-      const token = getToken();
       if ((uploadMethod === 'direct_file' && selectedFiles.length > 0) || (uploadMethod === 'zip' && selectedZipFile)) {
         const formData = new FormData();
         formData.append('versi', versi);
@@ -214,7 +210,7 @@ export default function AdminModelPage() {
         } else {
           selectedFiles.forEach((f) => formData.append('file', f));
         }
-        await api.post('/admin/model/upload-tfjs', formData, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } });
+        await api.post('/admin/model/upload-tfjs', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
         showFeedback('success', 'Upload Berhasil', `Model ${versi} berhasil diunggah & disinkronkan! 🎉`);
       } else {
         await api.post('/admin/model', {
@@ -223,7 +219,7 @@ export default function AdminModelPage() {
           ukuran_mb: parseFloat(uploadedFileSizeMb),
           model_json_url: modelJsonUrl, weights_url: weightsUrl,
           confidence_threshold: threshold,
-        }, { headers: { Authorization: `Bearer ${token}` } });
+        });
         showFeedback('success', 'Model Terdaftar', `Model ${versi} berhasil terdaftar di database!`);
       }
       setIsRegisterModal(false);

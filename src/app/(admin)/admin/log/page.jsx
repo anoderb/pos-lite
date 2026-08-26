@@ -22,10 +22,7 @@ export default function AdminLogPage() {
   const fetchLogs = async () => {
     setIsLoading(true);
     try {
-      const savedToken = localStorage.getItem('tokiva_admin_token') || localStorage.getItem('tokiva_jwt_token');
-      const res = await api.get('/admin/log/aktivitas', {
-        headers: { Authorization: `Bearer ${savedToken}` },
-      });
+      const res = await api.get('/admin/log/aktivitas');
       if (res.berhasil && res.data) {
         setLogs(res.data);
       }

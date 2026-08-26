@@ -77,8 +77,6 @@ export default function AdminDataCollectorPage() {
   // Selective sync state
   const [selectedClassIds, setSelectedClassIds] = useState([]);
 
-  const getToken = () => localStorage.getItem('tokiva_admin_token') || localStorage.getItem('tokiva_jwt_token');
-
   useEffect(() => {
     fetchClasses();
     fetchSyncStatus();
@@ -88,7 +86,7 @@ export default function AdminDataCollectorPage() {
   const fetchClasses = async () => {
     setIsLoading(true);
     try {
-      const res = await api.get('/admin/dataset/class', { headers: { Authorization: `Bearer ${getToken()}` } });
+      const res = await api.get('/admin/dataset/class');
       if (res?.berhasil && Array.isArray(res.data)) setClasses(res.data);
     } catch {
       setClasses([]);
@@ -100,7 +98,7 @@ export default function AdminDataCollectorPage() {
   const fetchUnmapped = async () => {
     setIsUnmappedLoading(true);
     try {
-      const res = await api.get('/admin/dataset/unmapped', { headers: { Authorization: `Bearer ${getToken()}` } });
+      const res = await api.get('/admin/dataset/unmapped');
       if (res?.berhasil && Array.isArray(res.data)) setUnmappedProducts(res.data);
     } catch {
       setUnmappedProducts([]);
@@ -111,7 +109,7 @@ export default function AdminDataCollectorPage() {
 
   const fetchSyncStatus = async () => {
     try {
-      const res = await api.get('/admin/dataset/sync-status', { headers: { Authorization: `Bearer ${getToken()}` } });
+      const res = await api.get('/admin/dataset/sync-status');
       if (res?.berhasil && res.data) {
         setSyncStatus(res.data);
         if (res.data.config) setSyncConfigForm(res.data.config);
@@ -125,9 +123,7 @@ export default function AdminDataCollectorPage() {
     setIsPhotoLoading(true);
     setClassPhotos([]);
     try {
-      const res = await api.get(`/admin/dataset/foto?class_id=${cls.id}&limit=200`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
+      const res = await api.get(`/admin/dataset/foto?class_id=${cls.id}&limit=200`);
       if (res?.berhasil && Array.isArray(res.data)) setClassPhotos(res.data);
     } catch {} finally {
       setIsPhotoLoading(false);
@@ -137,7 +133,7 @@ export default function AdminDataCollectorPage() {
   const handleTriggerSync = async () => {
     setIsSyncing(true);
     try {
-      const res = await api.post('/admin/dataset/sync-huggingface', {}, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const res = await api.post('/admin/dataset/sync-huggingface', {});
       showFeedback('success', 'Sync Berhasil', res?.pesan || 'Batch sync ke HuggingFace berhasil!');
       fetchSyncStatus();
       fetchClasses();
@@ -151,7 +147,7 @@ export default function AdminDataCollectorPage() {
   const handleSaveSyncConfig = async (e) => {
     e.preventDefault();
     try {
-      await api.put('/admin/dataset/sync-config', syncConfigForm, { headers: { Authorization: `Bearer ${getToken()}` } });
+      await api.put('/admin/dataset/sync-config', syncConfigForm);
       showFeedback('success', 'Tersimpan', 'Pengaturan auto-sync berhasil disimpan!');
       setIsSyncConfigModal(false);
       fetchSyncStatus();
@@ -166,7 +162,7 @@ export default function AdminDataCollectorPage() {
     try {
       await api.post('/admin/dataset/class', {
         nama: addClassName, barcode: addClassBarcode, deskripsi: addClassDesc,
-      }, { headers: { Authorization: `Bearer ${getToken()}` } });
+      });
       setIsAddClassModal(false);
       setAddClassName(''); setAddClassBarcode(''); setAddClassDesc('');
       fetchClasses();
@@ -188,7 +184,6 @@ export default function AdminDataCollectorPage() {
     e.preventDefault();
     if (!selectedUnmappedProduct) return;
     try {
-      const token = getToken();
       if (mapMode === 'existing') {
         if (!targetClassId) return showFeedback('info', 'Perhatian', 'Pilih class target');
         await api.post('/admin/dataset/map-class', {
@@ -196,14 +191,14 @@ export default function AdminDataCollectorPage() {
           class_id: targetClassId,
           barcode: mapBarcode,
           nama_varian: selectedUnmappedProduct.nama,
-        }, { headers: { Authorization: `Bearer ${token}` } });
+        });
       } else {
         if (!newClassName) return showFeedback('info', 'Perhatian', 'Nama class baru wajib diisi');
         await api.post('/admin/dataset/create-class-and-map', {
           nama_class: newClassName,
           barcode: mapBarcode,
           produk_ids: [selectedUnmappedProduct.id],
-        }, { headers: { Authorization: `Bearer ${token}` } });
+        });
       }
 
       showFeedback('success', 'Berhasil Dipetakan', `Produk ${selectedUnmappedProduct.nama} berhasil dipetakan ke Class!`);
@@ -222,8 +217,7 @@ export default function AdminDataCollectorPage() {
   const confirmDeleteUnmapped = async () => {
     if (!unmappedDeleteTarget) return;
     try {
-      const token = getToken();
-      await api.delete('/admin/dataset/unmapped/' + unmappedDeleteTarget.id, { headers: { Authorization: 'Bearer ' + token } });
+      await api.delete('/admin/dataset/unmapped/' + unmappedDeleteTarget.id);
       fetchUnmapped();
     } catch (err) {
       showFeedback('error', 'Gagal Hapus', err.response?.data?.pesan || err.message);
@@ -234,7 +228,7 @@ export default function AdminDataCollectorPage() {
   const handleToggleAktif = async (cls) => {
     setOpenMenuId(null);
     try {
-      await api.put(`/admin/dataset/class/${cls.id}/toggle-aktif`, {}, { headers: { Authorization: `Bearer ${getToken()}` } });
+      await api.put(`/admin/dataset/class/${cls.id}/toggle-aktif`, {});
       fetchClasses();
     } catch (err) {
       showFeedback('error', 'Gagal Ubah Status', err.response?.data?.pesan || err.message);
@@ -253,7 +247,7 @@ export default function AdminDataCollectorPage() {
     try {
       await api.put(`/admin/dataset/class/${editForm.id}`, {
         nama: editForm.nama, barcode: editForm.barcode, deskripsi: editForm.deskripsi,
-      }, { headers: { Authorization: `Bearer ${getToken()}` } });
+      });
       setIsEditModal(false);
       fetchClasses();
     } catch (err) {
@@ -269,7 +263,7 @@ export default function AdminDataCollectorPage() {
 
   const handleConfirmDelete = async () => {
     try {
-      await api.delete(`/admin/dataset/class/${selectedClassForAction.id}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      await api.delete(`/admin/dataset/class/${selectedClassForAction.id}`);
       setIsDeleteModal(false);
       setSelectedClassForAction(null);
       fetchClasses();
@@ -282,7 +276,7 @@ export default function AdminDataCollectorPage() {
   const handleSyncSelected = async () => {
     setIsSyncing(true);
     try {
-      const res = await api.post('/admin/dataset/sync-huggingface', { class_ids: selectedClassIds }, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const res = await api.post('/admin/dataset/sync-huggingface', { class_ids: selectedClassIds });
       showFeedback('success', 'Sync Berhasil', res?.pesan || `Sync ${selectedClassIds.length} class berhasil!`);
       setSelectedClassIds([]);
       fetchSyncStatus();

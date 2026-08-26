@@ -36,7 +36,7 @@ const fileToDataUrl = (file) => new Promise((resolve, reject) => {
 
 const TABS = [
   { id: 'toko', label: 'Profil & Toko', icon: Store },
-  { id: 'kasir', label: 'Kasir Staf', icon: UserCheck },
+  // { id: 'kasir', label: 'Kasir Staf', icon: UserCheck }, // hidden: role kasir dihapus
   { id: 'pembayaran', label: 'Pembayaran', icon: Wallet },
   { id: 'keamanan', label: 'Keamanan', icon: Lock },
   { id: 'lainnya', label: 'Lainnya', icon: Info },
@@ -269,19 +269,19 @@ export default function OwnerPengaturanPage() {
   );
 
   return (
-    <div className="max-w-[430px] mx-auto space-y-4 pb-24 text-[#10233E]">
+    <div className="max-w-[430px] lg:max-w-none mx-auto space-y-4 lg:space-y-5 pb-24 lg:pb-8 text-[#10233E]">
       {/* Banner */}
-      <div className="relative overflow-hidden rounded-[20px] p-4 bg-gradient-to-br from-[#E8FAF0] via-white to-[#FFF8D9] shadow-[0_2px_10px_rgba(16,35,62,.05)]">
-        <div className="relative z-10 max-w-[62%]">
-          <p className="text-[10px] font-normal text-[#68758A]">Dashboard &gt; Pengaturan &amp; Staf</p>
-          <h1 className="text-base font-semibold leading-6 mt-1">Pengaturan Toko &amp; Kasir</h1>
-          <p className="text-[10px] font-normal text-[#68758A] leading-4 mt-1">Atur profil toko, metode pembayaran, dan akun kasir staf.</p>
+      <div className="relative overflow-hidden rounded-[20px] lg:rounded-[22px] p-4 lg:p-6 bg-gradient-to-br from-[#E8FAF0] via-white to-[#FFF8D9] shadow-[0_2px_10px_rgba(16,35,62,.05)]">
+        <div className="relative z-10 max-w-[62%] lg:max-w-[58%]">
+          <p className="text-[10px] font-normal text-[#68758A]">Dashboard &gt; Pengaturan</p>
+          <h1 className="text-base lg:text-xl font-semibold leading-6 lg:leading-7 mt-1">Pengaturan</h1>
+          <p className="text-[10px] lg:text-xs font-normal text-[#68758A] leading-4 mt-1">Kelola informasi toko, metode pembayaran, dan keamanan akun Anda.</p>
         </div>
-        <img src="/assets/tokiva-dashboard/img-settings-3d.png" alt="Pengaturan 3D" className="absolute right-0 bottom-0 w-[42%] h-[96%] object-contain object-right-bottom" />
+        <img src="/assets/tokiva-dashboard/img-settings-3d.png" alt="Pengaturan 3D" className="absolute right-0 bottom-0 w-[42%] lg:w-[28%] h-[96%] object-contain object-right-bottom" />
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1.5 overflow-x-auto hide-scrollbar overscroll-x-contain">
+      <div className="flex gap-1.5 overflow-x-auto hide-scrollbar overscroll-x-contain lg:hidden">
         {TABS.map(t => {
           const Icon = t.icon;
           return (
@@ -300,48 +300,60 @@ export default function OwnerPengaturanPage() {
         })}
       </div>
 
+      <div className="lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(300px,2fr)] lg:gap-5 lg:items-start">
+
       {/* TAB: Profil & Toko */}
-      {activeTab === 'toko' && (
-        <section className="rounded-[18px] bg-white p-4 shadow-sm border border-gray-50 space-y-4">
-          <h2 className="text-sm font-medium leading-5 flex items-center gap-2"><Store className="w-4 h-4 text-[#0CAF60]" /> Informasi Toko</h2>
+      <section className={cn(
+        'rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-4 lg:col-span-1 lg:col-start-1 lg:row-start-1',
+        activeTab === 'toko' ? 'block' : 'hidden lg:block'
+      )}>
+        {/* Section header */}
+        <h2 className="flex text-sm lg:text-base font-medium leading-6 items-center gap-2"><Store className="w-4 h-4 text-[#0CAF60]" /> Informasi Toko</h2>
+        <div className="lg:grid lg:grid-cols-[148px_minmax(0,1fr)] lg:gap-5 lg:items-start">
 
           {/* Foto Toko */}
-          <div className="flex items-center gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-[#E8FAF0] text-[#0CAF60] flex items-center justify-center font-semibold text-lg overflow-hidden shrink-0">
+          <div className="flex items-center gap-3 lg:block">
+            <div className="w-14 h-14 lg:w-36 lg:h-36 rounded-2xl lg:rounded-[18px] bg-[#E8FAF0] text-[#0CAF60] flex items-center justify-center font-semibold text-lg overflow-hidden shrink-0">
               {tokoServer?.logo_url ? <img src={tokoServer.logo_url} alt="Logo toko" className="w-full h-full object-cover" /> : (tokoData.nama || 'T')[0].toUpperCase()}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-[#10233E] truncate">{tokoData.nama}</p>
-              <button onClick={() => logoInputRef.current?.click()} disabled={uploading === 'logo'} className="mt-1 flex items-center gap-1.5 text-[10px] font-medium text-[#0CAF60]">
+            <div className="flex-1 min-w-0 lg:mt-2">
+              <p className="text-xs font-medium text-[#10233E] truncate lg:hidden">{tokoData.nama}</p>
+              <button onClick={() => logoInputRef.current?.click()} disabled={uploading === 'logo'} className="mt-1 lg:mt-0 flex items-center justify-center gap-1.5 lg:w-36 lg:px-2 lg:py-2 lg:border lg:border-gray-200 lg:rounded-xl text-[10px] font-medium text-[#0CAF60] hover:bg-[#E8FAF0] transition-colors">
                 <Upload className="w-3 h-3" /> {uploading === 'logo' ? 'Mengunggah...' : 'Unggah Foto Toko'}
               </button>
+              <p className="hidden lg:block text-[9px] text-[#68758A] text-center mt-1">JPG, PNG maks. 2MB</p>
               <input ref={logoInputRef} type="file" accept="image/*" onChange={handleUploadLogo} className="hidden" />
             </div>
           </div>
 
-          <form onSubmit={handleSaveToko} className="space-y-3 text-xs">
-            <Input label="Nama Toko / Usaha" value={tokoData.nama} onChange={e => setTokoData({ ...tokoData, nama: e.target.value })} required />
+          <form onSubmit={handleSaveToko} className="space-y-3 text-xs lg:space-y-3.5">
+            <div className="lg:grid lg:grid-cols-2 lg:gap-x-4">
+              <Input label="Nama Toko / Usaha" value={tokoData.nama} onChange={e => setTokoData({ ...tokoData, nama: e.target.value })} required />
+              <Input label="No. WhatsApp / HP Toko" value={tokoData.noHp} onChange={e => setTokoData({ ...tokoData, noHp: e.target.value })} />
+            </div>
             <Input label="Alamat Toko" value={tokoData.alamat} onChange={e => setTokoData({ ...tokoData, alamat: e.target.value })} />
-            <Input label="No. WhatsApp / HP Toko" value={tokoData.noHp} onChange={e => setTokoData({ ...tokoData, noHp: e.target.value })} />
             <Input label="Catatan Footer Struk" value={tokoData.footerStruk} onChange={e => setTokoData({ ...tokoData, footerStruk: e.target.value })} />
+            <p className="hidden lg:block text-[10px] font-normal text-[#68758A]">Catatan ini akan tampil di bagian bawah struk.</p>
             <Button variant="primary" fullWidth size="lg" type="submit">
               <Save className="w-4 h-4 mr-1.5" />
               Simpan Profil Toko
             </Button>
           </form>
-        </section>
-      )}
+        </div>
+      </section>
 
-      {/* TAB: Kasir Staf */}
-      {activeTab === 'kasir' && (
-        <section className="rounded-[18px] bg-white p-4 shadow-sm border border-gray-50 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium leading-5 flex items-center gap-2"><UserCheck className="w-4 h-4 text-[#0CAF60]" /> Akun Kasir Staf ({stafList.length})</h2>
-            <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-1 px-3 py-2 bg-[#0CAF60] text-white rounded-xl text-[11px] font-medium shadow-sm hover:bg-[#087A4B] active:scale-[0.98] transition-all">
-              <Plus className="w-3.5 h-3.5" />
-              Tambah Kasir
-            </button>
-          </div>
+      {/* TAB: Kasir Staf — disembunyikan (role kasir dihapus, owner pegang POS). Kode dipertahankan untuk future use. */}
+      <section
+        data-hidden-feature="kasir-staf"
+        className="hidden rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-3"
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium leading-5 flex items-center gap-2"><UserCheck className="w-4 h-4 text-[#0CAF60]" /> Akun Kasir Staf ({stafList.length})</h2>
+          <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-1 px-3 py-2 bg-[#0CAF60] text-white rounded-xl text-[11px] font-medium shadow-sm hover:bg-[#087A4B] active:scale-[0.98] transition-all">
+            <Plus className="w-3.5 h-3.5" />
+            Tambah Kasir
+          </button>
+        </div>
 
           {isLoading ? renderStafSkeleton() : stafList.length === 0 ? (
             <p className="text-[11px] font-normal text-[#68758A] text-center py-6">Belum ada akun kasir staf. Klik "Tambah Kasir" untuk mendaftarkan staf.</p>
@@ -380,20 +392,21 @@ export default function OwnerPengaturanPage() {
               })}
             </div>
           )}
-        </section>
-      )}
+      </section>
 
-      {/* TAB: Pembayaran */}
-      {activeTab === 'pembayaran' && (
-        <div className="space-y-4">
+      {/* TAB: Pembayaran — desktop: contents (item langsung grid utama), mobile: stack */}
+      <div className={cn(
+        'space-y-4',
+        activeTab === 'pembayaran' ? 'block lg:contents' : 'hidden lg:contents'
+      )}>
           {/* QRIS */}
-          <section className="rounded-[18px] bg-white p-4 shadow-sm border border-gray-50 space-y-3">
+          <section className="rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-3 lg:col-start-1 lg:row-start-2 lg:self-start">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium leading-5 flex items-center gap-2"><QrCode className="w-4 h-4 text-[#0CAF60]" /> QRIS Toko</h2>
+              <h2 className="text-sm lg:text-base font-medium leading-5 flex items-center gap-2"><QrCode className="w-4 h-4 text-[#0CAF60]" /> QRIS Toko</h2>
               <Toggle value={payData.qrisAktif} onChange={v => setPayData({ ...payData, qrisAktif: v })} />
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-20 h-20 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+              <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden flex items-center justify-center shrink-0">
                 {tokoServer?.qris_url ? <img src={tokoServer.qris_url} alt="QRIS" className="w-full h-full object-contain" /> : <QrCode className="w-8 h-8 text-gray-300" />}
               </div>
               <div className="flex-1 min-w-0">
@@ -412,9 +425,9 @@ export default function OwnerPengaturanPage() {
           </section>
 
           {/* Rekening */}
-          <section className="rounded-[18px] bg-white p-4 shadow-sm border border-gray-50 space-y-3">
+          <section className="rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-3 lg:col-start-2 lg:row-start-2 lg:self-start">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium leading-5 flex items-center gap-2"><Banknote className="w-4 h-4 text-violet-600" /> Rekening Bank</h2>
+              <h2 className="text-sm lg:text-base font-medium leading-5 flex items-center gap-2"><Banknote className="w-4 h-4 text-violet-600" /> Rekening Bank</h2>
               <Toggle value={payData.transferAktif} onChange={v => setPayData({ ...payData, transferAktif: v })} />
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -424,18 +437,21 @@ export default function OwnerPengaturanPage() {
             <Input label="Atas Nama" placeholder="Khamdanu Syakir" value={payData.bankAtasNama} onChange={e => setPayData({ ...payData, bankAtasNama: e.target.value })} />
           </section>
 
-          <button onClick={handleSavePembayaran} className="w-full py-3 bg-[#0CAF60] text-white rounded-xl text-[13px] font-medium shadow-sm hover:bg-[#087A4B] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
-            <Save className="w-4 h-4" />
-            Simpan Pengaturan Pembayaran
-          </button>
-          <p className="text-[9px] font-normal text-[#68758A] text-center leading-4">Metode yang OFF atau belum lengkap tidak akan muncul di halaman pembayaran kasir. Jika QRIS &amp; Rekening tidak aktif, hanya Tunai yang tersedia.</p>
-        </div>
-      )}
+          <div className="space-y-2 lg:col-start-1 lg:row-start-3 lg:self-start">
+            <button onClick={handleSavePembayaran} className="w-full py-3 bg-[#0CAF60] text-white rounded-xl text-[13px] font-medium shadow-sm hover:bg-[#087A4B] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+              <Save className="w-4 h-4" />
+              Simpan Pengaturan Pembayaran
+            </button>
+            <p className="text-[9px] font-normal text-[#68758A] text-center leading-4">Metode yang OFF atau belum lengkap tidak akan muncul di halaman pembayaran kasir. Jika QRIS &amp; Rekening tidak aktif, hanya Tunai yang tersedia.</p>
+          </div>
+      </div>
 
       {/* TAB: Keamanan */}
-      {activeTab === 'keamanan' && (
-        <section className="rounded-[18px] bg-white p-4 shadow-sm border border-gray-50 space-y-3">
-          <h2 className="text-sm font-medium leading-5 flex items-center gap-2"><Lock className="w-4 h-4 text-[#0CAF60]" /> Ubah Kata Sandi Akun</h2>
+      <section className={cn(
+        'rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-3 lg:col-span-1 lg:col-start-2 lg:row-start-1',
+        activeTab === 'keamanan' ? 'block' : 'hidden lg:block'
+      )}>
+        <h2 className="text-sm lg:text-base lg:font-medium leading-5 flex items-center gap-2"><Lock className="w-4 h-4 text-[#0CAF60]" /> Ubah Kata Sandi Akun</h2>
           <form
             onSubmit={async (e) => {
               e.preventDefault();
@@ -463,21 +479,22 @@ export default function OwnerPengaturanPage() {
               Ubah Password Sekarang
             </Button>
           </form>
-        </section>
-      )}
+      </section>
 
       {/* TAB: Lainnya */}
-      {activeTab === 'lainnya' && (
-        <section className="rounded-[18px] bg-white p-4 shadow-sm border border-gray-50 space-y-2">
-          <h2 className="text-sm font-medium leading-5 flex items-center gap-2"><Info className="w-4 h-4 text-[#0CAF60]" /> Tentang Aplikasi</h2>
+      <section className={cn(
+        'rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-2 lg:col-span-1 lg:col-start-2 lg:row-start-3 lg:self-start',
+        activeTab === 'lainnya' ? 'block' : 'hidden lg:block'
+      )}>
+        <h2 className="text-sm font-medium leading-5 flex items-center gap-2"><Info className="w-4 h-4 text-[#0CAF60]" /> Tentang Aplikasi</h2>
           <div className="text-[11px] space-y-1">
             <div className="flex justify-between"><span className="font-normal text-[#68758A]">Aplikasi</span><span className="font-medium text-[#10233E]">{APP_NAME}</span></div>
             <div className="flex justify-between"><span className="font-normal text-[#68758A]">Versi</span><span className="font-medium text-[#10233E]">1.0.0</span></div>
             <div className="flex justify-between"><span className="font-normal text-[#68758A]">Peran Akun</span><span className="font-medium text-[#10233E]">Owner</span></div>
           </div>
           <p className="text-[9px] font-normal text-[#68758A] leading-4 pt-1">Tokiva — Sistem Point of Sale berbasis website dengan identifikasi produk berbasis Computer Vision untuk UMKM toko kelontong.</p>
-        </section>
-      )}
+      </section>
+      </div>
 
       {/* Modal Tambah Kasir */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Tambah Akun Kasir Staf Baru" size="md">

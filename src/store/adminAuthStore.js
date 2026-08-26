@@ -3,44 +3,21 @@ import { api } from '@/lib/api';
 
 export const useAdminAuthStore = create((set, get) => ({
   admin: null,
-  token: null,
   isInitialized: false,
   isLoading: false,
 
+  // Verify admin session via /admin/auth/profil (cookie sent automatically)
   initAdminAuth: async () => {
     if (typeof window === 'undefined') return;
-
-    const savedToken = localStorage.getItem('tokiva_admin_token');
-    const savedAdmin = localStorage.getItem('tokiva_admin_profile');
-
-    if (savedToken && savedAdmin) {
-      try {
-        const adminObj = JSON.parse(savedAdmin);
-        set({
-          token: savedToken,
-          admin: adminObj,
-          isInitialized: true,
-        });
-
-        const b = 'Be' + 'arer';
-        const authVal = b + ' ' + savedToken;
-        api.get('/admin/auth/me', {
-        headers: { Authorization: authVal }
-        })
-        .then((res) => {
-          if (res.berhasil && res.data) {
-            localStorage.setItem('tokiva_admin_profile', JSON.stringify(res.data));
-            set({ admin: res.data });
-          }
-        })
-        .catch(() => {
-          get().logoutAdmin();
-        });
-      } catch (err) {
-        get().logoutAdmin();
+    try {
+      const res = await api.get('/admin/auth/profil');
+      if (res?.berhasil && res.data) {
+        set({ admin: res.data, isInitialized: true });
+      } else {
+        set({ isInitialized: true, admin: null });
       }
-    } else {
-      set({ isInitialized: true, admin: null, token: null });
+    } catch {
+      set({ isInitialized: true, admin: null });
     }
   },
 
@@ -49,17 +26,8 @@ export const useAdminAuthStore = create((set, get) => ({
     try {
       const res = await api.post('/admin/auth/login', { email, password });
 
-      if (res.berhasil && res.data) {
-        const { token, admin } = res.data;
-
-        localStorage.setItem('tokiva_admin_token', token);
-        localStorage.setItem('tokiva_admin_profile', JSON.stringify(admin));
-
-        set({
-          admin,
-          token,
-          isLoading: false,
-        });
+      if (res.berhasil && res.data?.admin) {
+        set({ admin: res.data.admin, isLoading: false, isInitialized: true });
         return { success: true };
       }
       set({ isLoading: false });
@@ -70,16 +38,8 @@ export const useAdminAuthStore = create((set, get) => ({
     }
   },
 
-  logoutAdmin: () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('tokiva_admin_token');
-      localStorage.removeItem('tokiva_admin_profile');
-    }
-    set({
-      admin: null,
-      token: null,
-      isInitialized: true,
-      isLoading: false,
-    });
+  logoutAdmin: async () => {
+    try { await api.post('/admin/auth/logout'); } catch {}
+    set({ admin: null, isInitialized: true, isLoading: false });
   },
 }));

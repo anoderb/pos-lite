@@ -50,7 +50,10 @@ async function proxy(request, params, method) {
   const resHeaders = new Headers();
   resHeaders.set('content-type', res.headers.get('content-type') || 'application/json');
 
-  const setCookies = res.headers.getSetCookie?.() || [];
+  // getSetCookie() modern API; fallback ke get() untuk runtime lama
+  const setCookies = typeof res.headers.getSetCookie === 'function'
+    ? res.headers.getSetCookie()
+    : (res.headers.get('set-cookie') ? [res.headers.get('set-cookie')] : []);
   if (setCookies.length) {
     const cleaned = setCookies.map((c) => c.replace(/;\s*Domain\s*=[^;]+/gi, ''));
     for (const c of cleaned) resHeaders.append('set-cookie', c);

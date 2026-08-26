@@ -29,10 +29,7 @@ export default function AdminDashboardPage() {
   const fetchMetrics = async () => {
     setIsLoading(true);
     try {
-      const savedToken = localStorage.getItem('tokiva_admin_token');
-      const res = await api.get('/admin/dashboard', {
-        headers: { Authorization: `Bearer ${savedToken}` },
-      });
+      const res = await api.get('/admin/dashboard');
       if (res.berhasil && res.data) {
         setMetrics(res.data);
       }

@@ -19,8 +19,6 @@ export default function TrainingPanel({ onTrainingComplete }) {
   const startTimeRef = useRef(null);
   const timerRef = useRef(null);
 
-  const getToken = () => localStorage.getItem('tokiva_admin_token') || localStorage.getItem('tokiva_jwt_token');
-
   // Elapsed timer
   useEffect(() => {
     if (trainStatus === 'running') {
@@ -41,9 +39,7 @@ export default function TrainingPanel({ onTrainingComplete }) {
 
   const pollStatus = useCallback(async () => {
     try {
-      const res = await api.get('/admin/model/train/status', {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
+      const res = await api.get('/admin/model/train/status');
 
       if (!res?.berhasil) {
         setTrainStatus('error');
@@ -83,9 +79,7 @@ export default function TrainingPanel({ onTrainingComplete }) {
     setElapsed(0);
 
     try {
-      const res = await api.post('/admin/model/train', {}, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
+      const res = await api.post('/admin/model/train', {});
 
       if (!res?.berhasil) {
         setTrainStatus('error');

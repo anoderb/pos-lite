@@ -52,7 +52,7 @@ export default function OwnerSidebar() {
     {
       title: 'SISTEM',
       items: [
-        { label: 'Pengaturan & Staf', href: '/owner/pengaturan', icon: Settings },
+        { label: 'Pengaturan', href: '/owner/pengaturan', icon: Settings },
       ],
     },
   ];

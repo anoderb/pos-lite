@@ -14,10 +14,10 @@ export const useAuthStore = create((set, get) => ({
     try {
       const res = await api.get('/auth/profil');
       if (res?.berhasil && res.data) {
-        const profil = res.data;
+        const p = res.data.pengguna || res.data;
         set({
-          user: { id: profil.id, nama: profil.nama, email: profil.email, role: profil.role, toko_id: profil.toko_id },
-          toko: profil.toko || null,
+          user: { id: p.id, nama: p.nama, email: p.email, role: p.role, toko_id: p.toko_id },
+          toko: res.data.toko || null,
           isInitialized: true,
         });
       } else {

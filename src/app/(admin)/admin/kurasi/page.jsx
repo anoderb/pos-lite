@@ -24,10 +24,7 @@ export default function AdminKurasiPage() {
   const fetchKurasi = async () => {
     setIsLoading(true);
     try {
-      const savedToken = localStorage.getItem('tokiva_admin_token') || localStorage.getItem('tokiva_jwt_token');
-      const res = await api.get('/admin/kurasi', {
-        headers: { Authorization: `Bearer ${savedToken}` },
-      });
+      const res = await api.get('/admin/kurasi');
       if (res.berhasil && res.data) {
         setKoreksiList(res.data);
       }
@@ -40,10 +37,7 @@ export default function AdminKurasiPage() {
 
   const handleApprove = async (id) => {
     try {
-      const savedToken = localStorage.getItem('tokiva_admin_token') || localStorage.getItem('tokiva_jwt_token');
-      await api.put(`/admin/kurasi/${id}/setujui`, {}, {
-        headers: { Authorization: `Bearer ${savedToken}` },
-      });
+      await api.put(`/admin/kurasi/${id}/setujui`, {});
       fetchKurasi();
     } catch (err) {
       showFeedback('error', 'Gagal Setujui', err.message);
@@ -52,10 +46,7 @@ export default function AdminKurasiPage() {
 
   const handleReject = async (id) => {
     try {
-      const savedToken = localStorage.getItem('tokiva_admin_token') || localStorage.getItem('tokiva_jwt_token');
-      await api.put(`/admin/kurasi/${id}/tolak`, {}, {
-        headers: { Authorization: `Bearer ${savedToken}` },
-      });
+      await api.put(`/admin/kurasi/${id}/tolak`, {});
       fetchKurasi();
     } catch (err) {
       showFeedback('error', 'Gagal Tolak', err.message);

@@ -12,7 +12,7 @@ const breadcrumbMap = {
   '/owner/laporan': ['Laporan Keuangan'],
   '/owner/produk': ['Katalog & Harga'],
   '/owner/stock-adjustment': ['Tambah / Adjust Stok'],
-  '/owner/pengaturan': ['Pengaturan & Staf'],
+  '/owner/pengaturan': ['Pengaturan'],
   '/owner/pos': ['Mode Kasir POS'],
 };
 
