@@ -294,9 +294,9 @@ export default function KasirPosPage() {
     } catch { setTokoPay(null); }
   };
 
-  // Metode tersedia: tunai selalu; qris hanya jika aktif + lengkap
+  // Metode tersedia: tunai/qris mengikuti toggle pengaturan
   const metodeTersedia = [
-    { id: 'cash', label: 'Tunai', icon: Banknote },
+    ...(tokoPay?.tunai_aktif !== false ? [{ id: 'cash', label: 'Tunai', icon: Banknote }] : []),
     ...(tokoPay?.qris_aktif && tokoPay?.qris_status === 'valid' ? [{ id: 'qris', label: 'QRIS', icon: QrCode }] : []),
   ];
 
@@ -1442,7 +1442,7 @@ export default function KasirPosPage() {
             <div className="grid grid-cols-3 gap-2">
               {(
                 [
-                  { id: 'cash', label: 'Tunai', icon: Banknote, tersedia: true },
+                  { id: 'cash', label: 'Tunai', icon: Banknote, tersedia: tokoPay?.tunai_aktif !== false },
                   { id: 'qris', label: 'QRIS', icon: QrCode, tersedia: !!(tokoPay?.qris_aktif && tokoPay?.qris_status === 'valid') },
                 ]
               ).map(m => {
@@ -1589,7 +1589,7 @@ export default function KasirPosPage() {
             <div className="grid grid-cols-3 gap-2">
               {(
                 [
-                  { id: 'cash', label: 'Tunai', icon: Banknote, tersedia: true },
+                  { id: 'cash', label: 'Tunai', icon: Banknote, tersedia: tokoPay?.tunai_aktif !== false },
                   { id: 'qris', label: 'QRIS', icon: QrCode, tersedia: !!(tokoPay?.qris_aktif && tokoPay?.qris_status === 'valid') },
                 ]
               ).map(m => {

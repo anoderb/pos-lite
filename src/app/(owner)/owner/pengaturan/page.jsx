@@ -10,6 +10,7 @@ import {
   Lock,
   Save,
   Wallet,
+  Banknote,
   QrCode,
   Upload,
   Info,
@@ -59,6 +60,7 @@ export default function OwnerPengaturanPage() {
   // Form Pembayaran
   const [payData, setPayData] = useState({
     qrisAktif: false,
+    tunaiAktif: true,
     merchantName: '',
     mid: '',
   });
@@ -100,6 +102,7 @@ export default function OwnerPengaturanPage() {
         });
         setPayData({
           qrisAktif: d.qris_aktif === true,
+          tunaiAktif: d.tunai_aktif !== false,
           merchantName: d.qris_merchant_name || '',
           mid: d.qris_mid || '',
         });
@@ -174,6 +177,7 @@ export default function OwnerPengaturanPage() {
     try {
       await api.put('/owner/toko', {
         qris_aktif: payData.qrisAktif,
+        tunai_aktif: payData.tunaiAktif,
         qris_merchant_name: payData.merchantName,
         qris_mid: payData.mid,
       });
@@ -182,6 +186,30 @@ export default function OwnerPengaturanPage() {
     } catch (err) {
       toast.error(err.response?.data?.pesan || err.message, { title: 'Gagal Menyimpan' });
     }
+  };
+
+  // Toggle metode pembayaran dengan validasi klien (server juga validasi)
+  const toggleTunai = (v) => {
+    // Tunai tidak bisa OFF kalau QRIS belum ada/valid (harus minimal 1 metode aktif)
+    if (v === false && !payData.qrisAktif) {
+      toast.error('Tunai tidak bisa dimatikan selama QRIS belum aktif. Aktifkan QRIS dahulu, atau biarkan Tunai menyala.', { title: 'Tunai Tidak Bisa Dimatikan' });
+      return;
+    }
+    setPayData({ ...payData, tunaiAktif: v });
+  };
+
+  const toggleQris = (v) => {
+    // QRIS tidak bisa ON kalau belum ada QRIS valid
+    if (v === true && qrisStatus !== 'valid') {
+      toast.error('QRIS tidak bisa diaktifkan karena belum ada QRIS yang valid. Simpan & validasi QRIS di bagian QRIS Dinamis dahulu.', { title: 'QRIS Belum Valid' });
+      return;
+    }
+    // QRIS tidak bisa OFF kalau tunai juga OFF (minimal 1 metode aktif)
+    if (v === false && !payData.tunaiAktif) {
+      toast.error('QRIS tidak bisa dimatikan selama Tunai juga dimatikan. Minimal satu metode pembayaran harus aktif.', { title: 'Minimal 1 Metode Aktif' });
+      return;
+    }
+    setPayData({ ...payData, qrisAktif: v });
   };
 
   // Validasi & simpan QRIS string (dinamis)
@@ -424,11 +452,30 @@ export default function OwnerPengaturanPage() {
         'space-y-4',
         activeTab === 'pembayaran' ? 'block lg:contents' : 'hidden lg:contents'
       )}>
-          {/* QRIS */}
+          {/* Tunai */}
           <section className="rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-3 lg:col-start-1 lg:row-start-2 lg:self-start">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm lg:text-base font-medium leading-5 flex items-center gap-2"><QrCode className="w-4 h-4 text-[#0CAF60]" /> QRIS Toko</h2>
-              <Toggle value={payData.qrisAktif} onChange={v => setPayData({ ...payData, qrisAktif: v })} />
+              <div>
+                <h2 className="text-sm lg:text-base font-medium leading-5 flex items-center gap-2"><Banknote className="w-4 h-4 text-[#0CAF60]" /> Tunai</h2>
+                <p className="text-[9px] font-normal text-[#68758A] mt-0.5">Pembayaran langsung di kasir.</p>
+              </div>
+              <Toggle value={payData.tunaiAktif} onChange={toggleTunai} />
+            </div>
+            {!payData.tunaiAktif && (
+              <div className="rounded-xl bg-[#FFF8D9] p-2.5 text-[10px] font-normal text-[#B45309] leading-4">
+                Tunai sedang nonaktif. Pelanggan hanya bisa membayar lewat QRIS.
+              </div>
+            )}
+          </section>
+
+          {/* QRIS */}
+          <section className="rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-3 lg:col-start-2 lg:row-start-2 lg:self-start">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm lg:text-base font-medium leading-5 flex items-center gap-2"><QrCode className="w-4 h-4 text-[#0CAF60]" /> QRIS Toko</h2>
+                <p className="text-[9px] font-normal text-[#68758A] mt-0.5">Pembayaran scan QRIS dinamis.</p>
+              </div>
+              <Toggle value={payData.qrisAktif} onChange={toggleQris} />
             </div>
             <div className="flex items-center gap-3">
               <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden flex items-center justify-center shrink-0">
@@ -450,7 +497,7 @@ export default function OwnerPengaturanPage() {
           </section>
 
           {/* QRIS Dinamis */}
-          <section className="rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-3 lg:col-start-2 lg:row-start-2 lg:self-start">
+          <section className="rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-3 lg:col-span-2 lg:row-start-3 lg:self-start">
             <div className="flex items-center justify-between">
               <h2 className="text-sm lg:text-base font-medium leading-5 flex items-center gap-2"><QrCode className="w-4 h-4 text-violet-600" /> QRIS Dinamis</h2>
               {qrisStatus === 'valid' ? (
@@ -500,7 +547,7 @@ export default function OwnerPengaturanPage() {
             </button>
           </section>
 
-          <div className="space-y-2 lg:col-start-1 lg:row-start-3 lg:self-start">
+          <div className="space-y-2 lg:col-start-1 lg:row-start-4 lg:self-start">
             <button onClick={handleSavePembayaran} className="w-full py-3 bg-[#0CAF60] text-white rounded-xl text-[13px] font-medium shadow-sm hover:bg-[#087A4B] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
               <Save className="w-4 h-4" />
               Simpan Pengaturan Pembayaran
