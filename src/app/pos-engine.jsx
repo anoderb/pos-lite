@@ -31,11 +31,13 @@ import {
   List,
   Pause,
   Wallet,
+  CheckCircle2,
 } from 'lucide-react';
 import { getTf } from '@/lib/tf';
 import { cn, formatRupiah } from '@/lib/utils';
 import { api, getApiBaseUrl } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+import { useShiftStore } from '@/store/shiftStore';
 import { toast } from '@/components/ui/ToastProvider';
 
 /* ─────────── Reusable Product Thumbnail ─────────── */
@@ -106,9 +108,11 @@ export default function KasirPosPage() {
   const [modelError, setModelError] = useState(null);
   const [isModelLoading, setIsModelLoading] = useState(false);
 
-  // Active Shift State (DEEP-03)
-  const [shift, setShift] = useState(null);
-  const [isShiftLoading, setIsShiftLoading] = useState(true);
+  // Active Shift State (DEEP-03) — source of truth di shiftStore (biar sinkron dgn guard global)
+  const shift = useShiftStore((s) => s.shift);
+  const isShiftLoading = useShiftStore((s) => s.isShiftLoading);
+  const fetchShiftStore = useShiftStore((s) => s.fetchShift);
+  const openTutup = useShiftStore((s) => s.openTutup);
   const [modalAwal, setModalAwal] = useState('');
 
   // Statistik hari ini (real dari BE dashboard) + kategori POS
@@ -201,10 +205,11 @@ export default function KasirPosPage() {
     fetchProduk();
     fetchPelanggan();
     fetchActiveModel();
-    fetchShift();
+    fetchShiftStore();
     fetchTodayStats();
     fetchKategori();
     fetchTokoPay();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchTokoPay = async () => {
@@ -248,33 +253,6 @@ export default function KasirPosPage() {
       setKategoriList(Array.isArray(data) ? data : []);
     } catch {
       setKategoriList([]);
-    }
-  };
-
-  const fetchShift = async () => {
-    try {
-      setIsShiftLoading(true);
-      const res = await api.get('/kasir/shift/aktif');
-      const data = res?.data || res;
-      if (data && data.id) setShift(data);
-      else setShift(null);
-    } catch {
-      setShift(null);
-    } finally {
-      setIsShiftLoading(false);
-    }
-  };
-
-  const handleBukaShift = async () => {
-    try {
-      const res = await api.post('/kasir/shift/buka', { modal_awal: Number(modalAwal) || 0 });
-      const data = res?.data || res;
-      if (data && data.id) {
-        setShift(data);
-        setModalAwal('');
-      }
-    } catch (err) {
-      showFeedback('error', 'Gagal Buka Shift', err?.message || 'Coba lagi');
     }
   };
 
@@ -991,7 +969,9 @@ export default function KasirPosPage() {
      SCREEN 1: HALAMAN KASIR (AWAL) — HOME VIEW
      ════════════════════════════════════════════════════ */
 
-  // Shift Guard — wajib buka shift sebelum POS
+  // Shift Guard — wajib buka shift sebelum POS.
+  // Modal "Buka Shift" / "Lanjutkan" / "Tutup" ditangani ShiftGuardModal (OwnerLayout).
+  // Di sini cukup tampilkan kosong jika belum ada shift (buka/jeda).
   if (isShiftLoading) {
     return (
       <>
@@ -1002,37 +982,13 @@ export default function KasirPosPage() {
     );
   }
 
-  if (!shift) {
+  if (!shift || shift.status === 'jeda') {
     return (
       <>
-      <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-screen px-6 text-center space-y-5">
-        <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center">
-          <Banknote className="w-8 h-8" />
+        {/* Modal global ShiftGuardModal akan tampil otomatis */}
+        <div className="max-w-md mx-auto flex items-center justify-center min-h-screen">
+          <p className="text-sm text-gray-500">Menyiapkan shift...</p>
         </div>
-        <div>
-          <h2 className="text-lg font-bold text-gray-900">Buka Shift Dulu</h2>
-          <p className="text-xs text-gray-500 mt-1">Shift harus aktif sebelum transaksi.</p>
-        </div>
-        <div className="w-full max-w-xs space-y-3">
-          <div>
-            <label className="text-xs font-semibold text-gray-500 block mb-1">Modal Awal (Rp)</label>
-            <input
-              type="number"
-              value={modalAwal}
-              onChange={e => setModalAwal(e.target.value)}
-              placeholder="0"
-              className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-center focus:outline-none focus:border-[#16A34A]"
-            />
-          </div>
-          <button
-            onClick={handleBukaShift}
-            className="w-full py-3 bg-[#16A34A] text-white font-bold rounded-xl hover:bg-[#15803D] transition-all active:scale-[0.98]"
-          >
-            Buka Shift
-          </button>
-        </div>
-      </div>
-
       </>
     );
   }
@@ -1055,13 +1011,22 @@ export default function KasirPosPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-[#0CAF60]" /> Kasir
             </p>
           </div>
-          <button
-            onClick={() => setShowBarcodeScan(true)}
-            className="ml-2 flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 text-[11px] font-medium text-[#68758A] hover:bg-gray-50 transition-colors shrink-0"
-            title="Jeda transaksi & pindah scan"
-          >
-            <Pause className="w-3.5 h-3.5" /> Jeda Transaksi
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => useShiftStore.getState().requestNav('/owner/dashboard')}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 text-[11px] font-medium text-[#68758A] hover:bg-gray-50 transition-colors shrink-0"
+              title="Jeda shift lalu pindah halaman"
+            >
+              <Pause className="w-3.5 h-3.5" /> Jeda Shift
+            </button>
+            <button
+              onClick={() => openTutup()}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#F5C6C9] text-[#D94850] hover:bg-[#FFF0F0] transition-colors shrink-0"
+              title="Tutup shift & rekap kas"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" /> Tutup Shift
+            </button>
+          </div>
         </div>
       </div>
 

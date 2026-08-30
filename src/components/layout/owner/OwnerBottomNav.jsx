@@ -15,11 +15,21 @@ import {
   ScanBarcode,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useShiftStore } from '@/store/shiftStore';
 
 export default function OwnerBottomNav() {
   const pathname = usePathname();
+  const requestNav = useShiftStore((s) => s.requestNav);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
+
+  const handleNav = (e, href) => {
+    if (!requestNav(href)) {
+      e.preventDefault();
+      return;
+    }
+    setIsDrawerOpen(false);
+  };
 
   useEffect(() => {
     const hide = () => setIsHidden(true);
@@ -78,7 +88,7 @@ export default function OwnerBottomNav() {
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={() => setIsDrawerOpen(false)}
+                onClick={(e) => handleNav(e, item.href)}
                 className="p-4 bg-white border border-gray-100 hover:border-[#16A34A] shadow-xs rounded-2xl flex flex-col justify-between transition-all active:scale-[0.98] group"
               >
                 <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center mb-3', item.color)}>
@@ -108,7 +118,7 @@ export default function OwnerBottomNav() {
           {/* 1. Dashboard */}
           <Link
             href="/owner/dashboard"
-            onClick={() => setIsDrawerOpen(false)}
+            onClick={(e) => handleNav(e, '/owner/dashboard')}
             className="flex flex-col items-center justify-center flex-1 py-1"
           >
             <div
@@ -132,7 +142,7 @@ export default function OwnerBottomNav() {
           {/* 2. Produk */}
           <Link
             href="/owner/produk"
-            onClick={() => setIsDrawerOpen(false)}
+            onClick={(e) => handleNav(e, '/owner/produk')}
             className="flex flex-col items-center justify-center flex-1 py-1"
           >
             <div
@@ -157,7 +167,7 @@ export default function OwnerBottomNav() {
           <div className="flex-1 flex flex-col items-center justify-center -mt-6">
             <Link
               href="/owner/pos"
-              onClick={() => setIsDrawerOpen(false)}
+              onClick={(e) => handleNav(e, '/owner/pos')}
               className={cn(
                 'w-13 h-13 rounded-full text-white flex items-center justify-center shadow-lg border-4 border-[#F8FAF9] active:scale-90 transition-all',
                 pathname === '/owner/pos'
@@ -176,7 +186,7 @@ export default function OwnerBottomNav() {
           {/* 4. Laporan */}
           <Link
             href="/owner/laporan"
-            onClick={() => setIsDrawerOpen(false)}
+            onClick={(e) => handleNav(e, '/owner/laporan')}
             className="flex flex-col items-center justify-center flex-1 py-1"
           >
             <div

@@ -7,17 +7,19 @@ export const useAuthStore = create((set, get) => ({
   isInitialized: false,
   isLoading: false,
 
-  // Inisialisasi Auth — verify profile via /auth/profil (cookie otomatis)
+  // Inisialisasi Auth — cek sesi via /auth/status (selalu 200, tidak pernah 401,
+  // jadi halaman publik login/register tidak menghasilkan error palsu di console).
   initAuth: async () => {
     if (typeof window === 'undefined') return;
 
     try {
-      const res = await api.get('/auth/profil');
-      if (res?.berhasil && res.data) {
-        const p = res.data.pengguna || res.data;
+      const res = await api.get('/auth/status');
+      const d = res?.data || res;
+      if (res?.berhasil && d?.loggedIn && d.pengguna) {
+        const p = d.pengguna;
         set({
           user: { id: p.id, nama: p.nama, email: p.email, role: p.role, toko_id: p.toko_id },
-          toko: res.data.toko || null,
+          toko: d.toko || null,
           isInitialized: true,
         });
       } else {
@@ -49,16 +51,9 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Login via Google OAuth
-  loginWithGoogleSession: (session, pengguna, toko) => {
-    if (!pengguna) throw new Error('Sesi Google tidak valid');
-    set({ user: pengguna, toko: toko || null, isLoading: false });
-    return pengguna;
-  },
-
   // Logout
   logout: async () => {
-    try { await api.post('/auth/logout'); } catch {}
+    try { await api.post('/auth/logout', {}); } catch {}
     set({ user: null, toko: null, isInitialized: true });
   },
 

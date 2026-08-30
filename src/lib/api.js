@@ -19,16 +19,24 @@ export const api = axios.create({
 
 // No request interceptor needed — JWT managed via httpOnly cookie
 
+// Halaman publik yang TIDAK boleh di-redirect saat request-nya kena 401.
+// Register/verifikasi/lupa-password tetap harus bisa diakses tanpa login.
+const PUBLIC_ROUTES = ['/login', '/register', '/verifikasi', '/lupa-password', '/'];
+
 // Response interceptor: redirect ke login on 401, dispatch event on 429
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
     if (typeof window !== 'undefined' && error.response?.status === 401) {
       const reqUrl = error.config?.url || '';
-      if (!reqUrl.includes('/login') && !reqUrl.includes('/auth/login')) {
-        if (!window.location.pathname.startsWith('/login')) {
-          window.location.href = '/login';
-        }
+      const pathname = window.location.pathname;
+      // Jangan redirect kalau:
+      //  - request auth (login/profil/logout) — profil 401 = "belum login", wajar
+      //  - lagi di halaman publik (register/verifikasi/lupa-password/landing)
+      const isAuthApi = reqUrl.includes('/auth/');
+      const isPublicPage = PUBLIC_ROUTES.some((r) => pathname === r || (r !== '/' && pathname.startsWith(r)));
+      if (!isAuthApi && !isPublicPage && !pathname.startsWith('/owner')) {
+        window.location.href = '/login';
       }
     }
     const errorMsg =

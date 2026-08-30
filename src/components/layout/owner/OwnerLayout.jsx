@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import OwnerNavbar from './OwnerNavbar';
 import OwnerSidebar from './OwnerSidebar';
 import OwnerBottomNav from './OwnerBottomNav';
+import ShiftGuardModal from '@/components/shift/ShiftGuardModal';
 
 const breadcrumbMap = {
   '/owner/dashboard': ['Dashboard'],
@@ -38,6 +39,9 @@ export default function OwnerLayout({ children }) {
 
       {/* Floating Bottom Nav for Mobile */}
       <OwnerBottomNav />
+
+      {/* Global Shift Guard (modal buka/jeda/tutup shift + intercept nav/logout) */}
+      <ShiftGuardModal />
     </div>
   );
 }

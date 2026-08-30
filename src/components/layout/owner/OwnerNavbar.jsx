@@ -3,15 +3,38 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Wifi, WifiOff, Store, ShieldCheck, Settings, LogOut } from 'lucide-react';
+import { Wifi, WifiOff, Store, ShieldCheck, Settings, LogOut, Pause, Play, ScanBarcode } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { useShiftStore } from '@/store/shiftStore';
 import { APP_NAME } from '@/lib/config';
 
 export default function OwnerNavbar() {
   const router = useRouter();
   const { user, toko, logout } = useAuthStore();
+  const requestLogout = useShiftStore((s) => s.requestLogout);
+  const shift = useShiftStore((s) => s.shift);
+  const fetchShift = useShiftStore((s) => s.fetchShift);
+  const lanjutShift = useShiftStore((s) => s.lanjutShift);
+  const openTutup = useShiftStore((s) => s.openTutup);
   const [isOnline, setIsOnline] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [resumeLoading, setResumeLoading] = useState(false);
+
+  useEffect(() => {
+    fetchShift();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleLanjutkanShift = async () => {
+    try {
+      setResumeLoading(true);
+      await lanjutShift();
+      // Shift buka lagi → langsung ke POS
+      router.push('/owner/pos');
+    } catch {
+      setResumeLoading(false);
+    }
+  };
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -27,10 +50,14 @@ export default function OwnerNavbar() {
     };
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsProfileOpen(false);
-    logout();
-    router.replace('/login');
+    // Kalau shift aktif → wajib tutup dulu (modal), gak bisa logout langsung
+    const ok = requestLogout();
+    if (ok) {
+      await logout();
+      router.replace('/login');
+    }
   };
 
   return (
@@ -76,6 +103,47 @@ export default function OwnerNavbar() {
             </>
           )}
         </div>
+
+        {/* Shift Badge — jeda = amber + tombol Lanjutkan; buka = hijau indikator */}
+        {shift?.status === 'jeda' && (
+          <div className="flex items-center gap-1.5">
+            <span
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"
+              title={`Shift dijeda sejak ${shift.waktu_jeda ? new Date(shift.waktu_jeda).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'} WIB`}
+            >
+              <Pause className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Shift Dijeda</span>
+              <span suppressHydrationWarning>
+                {shift.waktu_jeda ? new Date(shift.waktu_jeda).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}
+              </span>
+            </span>
+            <button
+              onClick={handleLanjutkanShift}
+              disabled={resumeLoading}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#0CAF60] text-white hover:bg-[#087A4B] transition-colors active:scale-95 disabled:opacity-60"
+              title="Lanjutkan shift & kembali ke POS"
+            >
+              <Play className="w-3 h-3" />
+              <span className="hidden sm:inline">Lanjutkan</span>
+            </button>
+            <button
+              onClick={() => openTutup()}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium text-[#D94850] hover:bg-[#FFF0F0] transition-colors"
+              title="Tutup shift & rekap kas"
+            >
+              <ScanBarcode className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+        {shift?.status === 'buka' && (
+          <span
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-[#16A34A] border border-emerald-200"
+            title={`Shift aktif sejak ${shift.waktu_buka ? new Date(shift.waktu_buka).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'} WIB`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[#0CAF60] animate-pulse" />
+            <span className="hidden sm:inline">Shift Aktif</span>
+          </span>
+        )}
 
         {/* Owner Profile Badge (Clickable with Mobile Popover Dropdown) */}
         <div className="relative pl-2 border-l border-gray-100">

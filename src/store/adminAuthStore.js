@@ -39,7 +39,7 @@ export const useAdminAuthStore = create((set, get) => ({
   },
 
   logoutAdmin: async () => {
-    try { await api.post('/admin/auth/logout'); } catch {}
+    try { await api.post('/admin/auth/logout', {}); } catch {}
     set({ admin: null, isInitialized: true, isLoading: false });
   },
 }));

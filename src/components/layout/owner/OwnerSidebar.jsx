@@ -16,16 +16,32 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
+import { useShiftStore } from '@/store/shiftStore';
 import { APP_NAME } from '@/lib/config';
 
 export default function OwnerSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, toko, logout } = useAuthStore();
+  const requestNav = useShiftStore((s) => s.requestNav);
+  const requestLogout = useShiftStore((s) => s.requestLogout);
 
-  const handleLogout = () => {
-    logout();
-    router.replace('/login');
+  const handleNav = (e, href) => {
+    // Intercept: kalau shift buka & pindah ke halaman lain → modal guard
+    if (!requestNav(href)) {
+      e.preventDefault();
+      return;
+    }
+    // izinkan navigasi default (next/link)
+  };
+
+  const handleLogout = async () => {
+    // Kalau shift buka → wajib tutup dulu (modal), gak bisa logout langsung
+    const ok = requestLogout();
+    if (ok) {
+      await logout();
+      router.replace('/login');
+    }
   };
 
   const menuGroups = [
@@ -90,6 +106,7 @@ export default function OwnerSidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={(e) => handleNav(e, item.href)}
                   className={cn(
                     'flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all',
                     isActive
