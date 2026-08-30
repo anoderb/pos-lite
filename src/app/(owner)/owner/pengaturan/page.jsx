@@ -65,7 +65,10 @@ export default function OwnerPengaturanPage() {
     tunaiAktif: true,
     merchantName: '',
     mid: '',
+    merchantCity: '',
+    method: '',
   });
+  const [qrisPreview, setQrisPreview] = useState('');
   const [uploading, setUploading] = useState(''); // 'logo' | 'qris' | ''
   const logoInputRef = useRef(null);
   const qrisInputRef = useRef(null);
@@ -102,11 +105,15 @@ export default function OwnerPengaturanPage() {
           noHp: d.no_telp || '',
           footerStruk: d.catatan_footer || 'Terima kasih telah berbelanja!',
         });
+        setQrisPreview(d.qris_url || '');
+        setQrisInfo(d.qris_info || null);
         setPayData({
           qrisAktif: d.qris_aktif === true,
           tunaiAktif: d.tunai_aktif !== false,
-          merchantName: d.qris_merchant_name || '',
-          mid: d.qris_mid || '',
+          merchantName: d.qris_info?.merchant_name || '',
+          mid: d.qris_info?.merchant_id || '',
+          merchantCity: d.qris_info?.merchant_city || '',
+          method: d.qris_info?.method || '',
         });
       }
     } catch { /* biarkan default */ }
@@ -163,33 +170,60 @@ export default function OwnerPengaturanPage() {
     if (!file) return;
     try {
       setUploading('qris');
+      setQrisStatus('empty');
+      setQrisInfo(null);
 
-      // Decode QRIS dari gambar -> string (pakai jsQR + canvas)
-      const img = await createImageBitmap(file);
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
-
-      if (!code || !code.data) {
-        toast.error('Tidak dapat membaca QR dari gambar. Pastikan gambar QRIS jelas & tidak buram.', { title: 'QR Tidak Terbaca' });
-        return;
+      if (!file.type.startsWith('image/')) {
+        throw new Error('File QRIS harus berupa gambar.');
       }
+      const previewUrl = await fileToDataUrl(file);
+      setQrisPreview(previewUrl);
 
-      const decoded = String(code.data).trim();
+      // Sama seperti QRISInput pada repo sumber: FileReader -> Image -> canvas -> jsQR.
+      // attemptBoth membantu foto/screenshot QR yang kontrasnya terbalik.
+      const decoded = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Gambar QRIS tidak dapat dibuka.'));
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || img.width;
+          canvas.height = img.naturalHeight || img.height;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (!ctx) return reject(new Error('Browser tidak mendukung pembacaan QR.'));
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, canvas.width, canvas.height, { inversionAttempts: 'attemptBoth' });
+          if (!code?.data) return reject(new Error('QR tidak terbaca. Gunakan foto yang lebih jelas dan pastikan seluruh barcode terlihat.'));
+          resolve(String(code.data).trim());
+        };
+        img.src = String(previewUrl);
+      });
+
       setQrisString(decoded);
-
-      // Auto-validasi string yang berhasil di-decode
       setSavingQris(true);
       try {
         const res = await api.put('/owner/toko/qris', { qris_string: decoded });
         const d = res?.data?.data || res?.data || {};
         setQrisStatus(d.qris_status || 'valid');
         setQrisInfo(d.qris_info || null);
-        toast.success(d.pesan || 'QRIS berhasil dibaca & diverifikasi.', { title: 'QRIS Valid' });
+        setPayData((current) => ({
+          ...current,
+          merchantName: d.qris_info?.merchant_name || '',
+          mid: d.qris_info?.merchant_id || '',
+          merchantCity: d.qris_info?.merchant_city || '',
+          method: d.qris_info?.method || '',
+        }));
+
+        // Simpan gambar asli agar preview tetap ada setelah halaman direfresh.
+        try {
+          const mediaRes = await api.post('/owner/toko/qris', { qris_url: previewUrl });
+          const mediaData = mediaRes?.data || mediaRes || {};
+          if (mediaData.qris_url) setQrisPreview(mediaData.qris_url);
+        } catch {
+          // QRIS sudah valid; preview lokal tetap ditampilkan bila upload gambar gagal.
+          toast.info('QRIS valid, tetapi preview belum tersimpan ke server.', { title: 'Preview Belum Tersimpan' });
+        }
+        toast.success(d.pesan || 'QRIS berhasil dibaca dan diverifikasi.', { title: 'QRIS Valid' });
       } catch (err) {
         setQrisStatus('invalid');
         setQrisInfo(null);
@@ -198,7 +232,8 @@ export default function OwnerPengaturanPage() {
         setSavingQris(false);
       }
     } catch (err) {
-      toast.error(err.message || 'Gagal membaca gambar QRIS.', { title: 'Gagal Membaca QR' });
+      setQrisStatus('invalid');
+      toast.error(err.message || 'Gagal membaca gambar QRIS.', { title: 'QR Tidak Terbaca' });
     } finally {
       setUploading('');
       if (qrisInputRef.current) qrisInputRef.current.value = '';
@@ -210,8 +245,6 @@ export default function OwnerPengaturanPage() {
       await api.put('/owner/toko', {
         qris_aktif: payData.qrisAktif,
         tunai_aktif: payData.tunaiAktif,
-        qris_merchant_name: payData.merchantName,
-        qris_mid: payData.mid,
       });
       toast.success('Pengaturan pembayaran tersimpan.', { title: 'Berhasil!' });
       fetchToko();
@@ -233,7 +266,7 @@ export default function OwnerPengaturanPage() {
   const toggleQris = (v) => {
     // QRIS tidak bisa ON kalau belum ada QRIS valid
     if (v === true && qrisStatus !== 'valid') {
-      toast.error('QRIS tidak bisa diaktifkan karena belum ada QRIS yang valid. Simpan & validasi QRIS di bagian QRIS Dinamis dahulu.', { title: 'QRIS Belum Valid' });
+      toast.error('QRIS tidak bisa diaktifkan karena belum ada QRIS yang valid. Upload foto QRIS toko terlebih dahulu.', { title: 'QRIS Belum Valid' });
       return;
     }
     // QRIS tidak bisa OFF kalau tunai juga OFF (minimal 1 metode aktif)
@@ -257,29 +290,16 @@ export default function OwnerPengaturanPage() {
       setQrisStatus(d.status || 'empty');
       setQrisInfo(d.info || null);
       if (d.qris_string) setQrisString(d.qris_string);
+      setPayData((current) => ({
+        ...current,
+        merchantName: d.info?.merchant_name || current.merchantName || '',
+        mid: d.info?.merchant_id || current.mid || '',
+        merchantCity: d.info?.merchant_city || current.merchantCity || '',
+        method: d.info?.method || current.method || '',
+      }));
     } catch { /* default */ }
   };
 
-  const handleSaveQrisString = async () => {
-    if (!qrisString.trim()) {
-      toast.error('Tempel string QRIS terlebih dahulu.', { title: 'QRIS Kosong' });
-      return;
-    }
-    setSavingQris(true);
-    try {
-      const res = await api.put('/owner/toko/qris', { qris_string: qrisString.trim() });
-      const d = res?.data?.data || res?.data || {};
-      setQrisStatus(d.qris_status || 'valid');
-      setQrisInfo(d.qris_info || null);
-      toast.success(d.pesan || 'QRIS berhasil disimpan & diaktifkan.', { title: 'QRIS Valid' });
-    } catch (err) {
-      setQrisStatus('invalid');
-      setQrisInfo(null);
-      toast.error(err.response?.data?.pesan || err.message, { title: 'QRIS Tidak Valid' });
-    } finally {
-      setSavingQris(false);
-    }
-  };
 
   const handleCreateKasir = async (e) => {
     e.preventDefault();
@@ -499,102 +519,61 @@ export default function OwnerPengaturanPage() {
               </div>
             )}
           </section>
-
-          {/* QRIS */}
+          {/* QRIS Toko — satu card untuk foto, status, dan data merchant */}
           <section className="rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-3 lg:col-start-2 lg:row-start-2 lg:self-start">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm lg:text-base font-medium leading-5 flex items-center gap-2"><QrCode className="w-4 h-4 text-[#0CAF60]" /> QRIS Toko</h2>
-                <p className="text-[9px] font-normal text-[#68758A] mt-0.5">Pembayaran scan QRIS dinamis.</p>
+                <p className="text-[9px] font-normal text-[#68758A] mt-0.5">Upload foto QRIS asli milik toko.</p>
               </div>
               <Toggle value={payData.qrisAktif} onChange={toggleQris} />
             </div>
-            <div className="flex items-center gap-3">
-              <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden flex items-center justify-center shrink-0">
-                {tokoServer?.qris_url ? <img src={tokoServer.qris_url} alt="QRIS" className="w-full h-full object-contain" /> : <QrCode className="w-8 h-8 text-gray-300" />}
+            <div className="flex flex-col sm:flex-row items-stretch gap-3 rounded-xl bg-[#F8FAFB] border border-gray-100 p-3">
+              <div className="w-full sm:w-32 h-32 rounded-xl bg-white border border-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+                {qrisPreview ? (
+                  <img
+                    src={qrisPreview}
+                    alt="Preview foto QRIS toko"
+                    className="w-full h-full object-contain"
+                    onError={() => setQrisPreview('')}
+                  />
+                ) : (
+                  <QrCode className="w-10 h-10 text-gray-300" />
+                )}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-medium text-[#10233E]">Gambar QRIS</p>
-                <p className="text-[9px] font-normal text-[#68758A] mt-0.5">Upload QRIS dari penyedia pembayaran Anda.</p>
-                <button onClick={() => qrisInputRef.current?.click()} disabled={uploading === 'qris'} className="mt-1.5 flex items-center gap-1.5 text-[10px] font-medium text-[#0CAF60]">
-                  <Upload className="w-3 h-3" /> {uploading === 'qris' ? 'Mengunggah...' : 'Upload QRIS'}
+              <div className="min-w-0 flex-1 flex flex-col justify-center">
+                <p className="text-[10px] font-medium text-[#10233E]">Foto QRIS Toko</p>
+                <p className="text-[9px] font-normal text-[#68758A] mt-1 leading-4">
+                  {qrisPreview ? 'Foto QRIS tersimpan.' : 'Belum ada foto QRIS tersimpan.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => qrisInputRef.current?.click()}
+                  disabled={uploading === 'qris' || savingQris}
+                  className="mt-2 w-fit flex items-center gap-1.5 text-[10px] font-medium text-[#0CAF60] disabled:opacity-50"
+                >
+                  {uploading === 'qris' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                  {uploading === 'qris' ? 'Membaca QRIS...' : savingQris ? 'Memvalidasi...' : qrisPreview ? 'Ganti Foto QRIS' : 'Upload Foto QRIS'}
                 </button>
-                <input ref={qrisInputRef} type="file" accept="image/*" onChange={handleUploadQris} className="hidden" />
               </div>
             </div>
+            <input ref={qrisInputRef} type="file" accept="image/*" onChange={handleUploadQris} className="hidden" />
             <div className="grid grid-cols-2 gap-2">
-              <Input label="Nama Merchant" placeholder="TOKO BERKAH" value={payData.merchantName} onChange={e => setPayData({ ...payData, merchantName: e.target.value })} />
-              <Input label="MID / ID Merchant" placeholder="ID1234567" value={payData.mid} onChange={e => setPayData({ ...payData, mid: e.target.value })} />
+              <Input label="Nama Merchant" placeholder="Menunggu hasil baca QRIS" value={payData.merchantName} readOnly className="bg-gray-50 cursor-not-allowed" />
+              <Input label="ID Merchant" placeholder="Menunggu hasil baca QRIS" value={payData.mid} readOnly className="bg-gray-50 cursor-not-allowed" />
+              <Input label="Kota" placeholder="Menunggu hasil baca QRIS" value={payData.merchantCity} readOnly className="bg-gray-50 cursor-not-allowed" />
+              <Input label="Tipe" placeholder="Menunggu hasil baca QRIS" value={payData.method === 'static' ? 'Statis' : payData.method === 'dynamic' ? 'Dinamis' : ''} readOnly className="bg-gray-50 cursor-not-allowed" />
             </div>
-          </section>
-
-          {/* QRIS Dinamis */}
-          <section className="rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-3 lg:col-span-2 lg:row-start-3 lg:self-start">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm lg:text-base font-medium leading-5 flex items-center gap-2"><QrCode className="w-4 h-4 text-violet-600" /> QRIS Dinamis</h2>
-              {qrisStatus === 'valid' ? (
-                <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-[#E8FAF0] text-[#087A4B]">✓ Valid</span>
-              ) : qrisStatus === 'invalid' ? (
-                <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-[#FFF0F0] text-[#D94850]">✕ Tidak Valid</span>
-              ) : (
-                <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-[#68758A]">Belum Diatur</span>
-              )}
-            </div>
-            <div>
-              <label className="text-[10px] font-medium text-[#10233E] block mb-1.5">Foto Barcode QRIS</label>
-              <button
-                onClick={() => qrisInputRef.current?.click()}
-                disabled={uploading === 'qris' || savingQris}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 hover:bg-[#E8FAF0] hover:border-[#0CAF60] transition-all text-[11px] font-medium text-[#68758A] active:scale-[0.98] disabled:opacity-50"
-              >
-                {uploading === 'qris' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {uploading === 'qris' ? 'Membaca QRIS...' : savingQris ? 'Memvalidasi...' : 'Unggah Foto Barcode QRIS'}
-              </button>
-              <input ref={qrisInputRef} type="file" accept="image/*" onChange={handleUploadQris} className="hidden" />
-              <p className="text-[9px] font-normal text-[#68758A] mt-1.5 leading-4">
-                Foto barcode QRIS dari toko Anda (dari penyedia QRIS). Sistem otomatis membaca, memeriksa kevalidannya, lalu memakainya untuk QR pembayaran berisi nominal di kasir.
-              </p>
-            </div>
-
-            {(qrisString || qrisInfo) && (
-              <div>
-                <label className="text-[10px] font-medium text-[#10233E] block mb-1">Hasil Baca</label>
-                <textarea
-                  value={qrisString}
-                  onChange={(e) => setQrisString(e.target.value)}
-                  rows={3}
-                  className="w-full text-[11px] font-mono px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0CAF60]/30 resize-none"
-                />
-              </div>
-            )}
-            {qrisInfo && (
-              <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#F8FAFB] p-2.5">
-                <div>
-                  <p className="text-[9px] font-normal text-[#68758A]">Nama Merchant</p>
-                  <p className="text-[10px] font-medium text-[#10233E] truncate">{qrisInfo.merchant_name || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-[9px] font-normal text-[#68758A]">Kota</p>
-                  <p className="text-[10px] font-medium text-[#10233E] truncate">{qrisInfo.merchant_city || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-[9px] font-normal text-[#68758A]">ID Merchant</p>
-                  <p className="text-[10px] font-medium text-[#10233E] truncate">{qrisInfo.merchant_id || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-[9px] font-normal text-[#68758A]">Tipe</p>
-                  <p className="text-[10px] font-medium text-[#10233E] capitalize">{qrisInfo.method === 'dynamic' ? 'Dinamis' : 'Statis'}</p>
-                </div>
-              </div>
-            )}
             {qrisStatus === 'invalid' && (
               <div className="rounded-xl bg-[#FFF0F0] p-2.5 text-[10px] font-normal text-[#D94850] leading-4">
-                Barcode QRIS tidak valid. Periksa kembali foto & pastikan itu barcode QRIS dari penyedia (GoPay/OVO/DANA/bank).
+                Barcode QRIS tidak valid. Silakan upload foto QRIS statis asli dari penyedia pembayaran.
               </div>
             )}
+            <p className="text-[9px] font-normal text-[#68758A] leading-4">Sistem membaca QRIS, mengisi data merchant otomatis, lalu menyimpan foto ke bucket toko-qris.</p>
           </section>
 
-          <div className="space-y-2 lg:col-start-1 lg:row-start-4 lg:self-start">
+
+          <div className="space-y-2 lg:col-start-1 lg:row-start-3 lg:self-start">
             <button onClick={handleSavePembayaran} className="w-full py-3 bg-[#0CAF60] text-white rounded-xl text-[13px] font-medium shadow-sm hover:bg-[#087A4B] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
               <Save className="w-4 h-4" />
               Simpan Pengaturan Pembayaran

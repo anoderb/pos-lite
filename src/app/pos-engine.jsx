@@ -38,6 +38,7 @@ import { api, getApiBaseUrl } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useShiftStore } from '@/store/shiftStore';
 import { toast } from '@/components/ui/ToastProvider';
+import QRCode from 'qrcode';
 
 /* ─────────── Reusable Product Thumbnail ─────────── */
 function ProdukThumb({ nama, img, className }) {
@@ -95,6 +96,9 @@ export default function KasirPosPage() {
   const [qrisCancelReason, setQrisCancelReason] = useState('');
   const [qrisCancelError, setQrisCancelError] = useState('');
   const [qrisActionLoading, setQrisActionLoading] = useState(false);
+  const [qrisImageSrc, setQrisImageSrc] = useState('');
+  const [qrisImageError, setQrisImageError] = useState('');
+  const [showQrisImageModal, setShowQrisImageModal] = useState(false);
 
   // AI & Barcode scanning state
   const [isDetecting, setIsDetecting] = useState(false);
@@ -945,6 +949,33 @@ export default function KasirPosPage() {
     window.dispatchEvent(new CustomEvent(overlayOpen ? 'owner-nav-hide' : 'owner-nav-show'));
     return () => window.dispatchEvent(new CustomEvent('owner-nav-show'));
   }, [showReceipt, showQrisPending]);
+
+  // Generate QR secara lokal dari payload transaksi. Tidak bergantung API gambar
+  // eksternal yang bisa diblokir browser/network.
+  useEffect(() => {
+    let active = true;
+    const payload = qrisPendingTx?.qris_payload;
+    setQrisImageError('');
+    setShowQrisImageModal(false);
+    if (!payload) {
+      setQrisImageSrc('');
+      return undefined;
+    }
+    setQrisImageSrc('');
+    QRCode.toDataURL(payload, {
+      width: 280,
+      margin: 2,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#10233E', light: '#FFFFFF' },
+    })
+      .then((src) => {
+        if (active) setQrisImageSrc(src);
+      })
+      .catch(() => {
+        if (active) setQrisImageError('QR pembayaran gagal dibuat. Silakan coba transaksi lagi.');
+      });
+    return () => { active = false; };
+  }, [qrisPendingTx?.qris_payload]);
 
   /* ── Checkout ── */
   const handleBayar = async () => {
@@ -2288,9 +2319,7 @@ export default function KasirPosPage() {
     if (!showQrisPending || !qrisPendingTx) return null;
     const qt = qrisPendingTx;
     const merchantNama = tokoPay?.qris_info?.merchant_name || toko?.nama || 'Tokiva';
-    const qrSrc = qt.qris_payload
-      ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qt.qris_payload)}&size=240x240`
-      : '';
+    const qrSrc = qrisImageSrc;
     return (
       <>
         <div className="hidden lg:block fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fade-in" />
@@ -2308,15 +2337,27 @@ export default function KasirPosPage() {
               {/* QR */}
               <div className="flex justify-center mb-3">
                 {qrSrc ? (
-                  <img
-                    src={qrSrc}
-                    alt="QRIS"
-                    className="w-56 h-56 rounded-xl bg-white border border-gray-100"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowQrisImageModal(true)}
+                    className="group rounded-2xl bg-white p-2 border border-gray-100 shadow-sm hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-[#0CAF60]/40"
+                    aria-label="Buka QR pembayaran"
+                    title="Klik untuk memperbesar QR pembayaran"
+                  >
+                    <img
+                      src={qrSrc}
+                      alt="QR pembayaran QRIS"
+                      className="w-56 h-56 rounded-xl bg-white object-contain"
+                    />
+                    <span className="block text-[9px] text-[#68758A] mt-1 group-hover:text-[#0CAF60]">Klik QR untuk memperbesar</span>
+                  </button>
+                ) : qrisImageError ? (
+                  <div className="w-56 min-h-56 rounded-xl bg-[#FFF0F0] border border-[#F5C6C9] flex items-center justify-center text-center p-4 text-[10px] text-[#D94850]">
+                    {qrisImageError}
+                  </div>
                 ) : (
                   <div className="w-56 h-56 rounded-xl bg-gray-50 border border-dashed border-gray-200 flex items-center justify-center text-[10px] text-[#68758A]">
-                    QR tidak tersedia
+                    Menyiapkan QR pembayaran...
                   </div>
                 )}
               </div>
@@ -2359,6 +2400,36 @@ export default function KasirPosPage() {
             </div>
           </div>
         </div>
+
+        {/* Modal QR besar — hanya QR + tombol tutup */}
+        {showQrisImageModal && qrSrc && (
+          <div
+            className="fixed inset-0 z-[80] bg-black/75 backdrop-blur-sm flex items-center justify-center p-5 animate-fade-in"
+            onClick={() => setShowQrisImageModal(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="QR pembayaran"
+          >
+            <div
+              className="relative bg-white rounded-2xl p-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setShowQrisImageModal(false)}
+                className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white shadow-lg flex items-center justify-center text-[#10233E] hover:bg-gray-100"
+                aria-label="Tutup QR pembayaran"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <img
+                src={qrSrc}
+                alt="QR pembayaran QRIS ukuran besar"
+                className="w-[min(80vw,360px)] h-[min(80vw,360px)] object-contain rounded-xl"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Modal alasan batal (alasan wajib) */}
         {showQrisCancelModal && (

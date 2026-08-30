@@ -118,7 +118,6 @@ export default function ShiftGuardModal() {
   const allTxs = rekap?.transaksi || [];
   const totalPenjualanLive = Number(rekap?.total_penjualan ?? 0);
   const totalQrisLive = Number(rekap?.total_qris ?? 0);
-  const totalTransferLive = Number(rekap?.total_transfer ?? 0);
   const totalCash = Number(rekap?.total_cash ?? 0);
   const modalAwalShift = Number(shift?.modal_awal || 0);
   const expectedKas = modalAwalShift + totalCash;
@@ -304,7 +303,6 @@ export default function ShiftGuardModal() {
     const txList = rekap?.transaksi || [];
     const totalPenjualan = totalPenjualanLive;
     const totalQris = totalQrisLive;
-    const totalTransfer = totalTransferLive;
     const totalVoid = Number(rekap?.total_void ?? 0);
 
     return (
@@ -334,7 +332,7 @@ export default function ShiftGuardModal() {
               <Row label="Total Penjualan" value={formatRupiah(totalPenjualan)} />
               <Row label="– Tunai" value={formatRupiah(totalCash)} />
               <Row label="– QRIS" value={formatRupiah(totalQris)} />
-              <Row label="– Transfer" value={formatRupiah(totalTransfer)} />
+
               {totalVoid > 0 && <Row label="Void" value={formatRupiah(totalVoid)} red />}
               <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                 <span className="text-xs font-semibold text-[#10233E]">Kas Seharusnya</span>
