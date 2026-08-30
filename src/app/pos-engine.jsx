@@ -1689,7 +1689,7 @@ export default function KasirPosPage() {
                     <p className="text-[11px] font-medium text-[#10233E] font-mono truncate">{t.nomor_transaksi}</p>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span className="text-[9px] font-normal text-[#68758A]">{formatRiwayatWaktu(t.created_at)}</span>
-                      {statusBadgeRiwayat(t)}
+                      {(() => { const b = statusBadgeRiwayat(t); return b ? <span className={cn('text-[8px] font-medium px-1.5 py-px rounded-full', b.cls)}>{b.label}</span> : null; })()}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
