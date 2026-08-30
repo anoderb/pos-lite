@@ -261,6 +261,7 @@ export default function DashboardContent() {
   const [dash, setDash] = useState(EMPTY_DASH);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [pendingTotal, setPendingTotal] = useState(0);
 
   const fetchDashboard = useCallback(async () => {
     setIsLoading(true);
@@ -272,6 +273,11 @@ export default function DashboardContent() {
       const res = await api.get('/owner/dashboard', { params });
       const d = res?.data || res || {};
       setDash({ ...EMPTY_DASH, ...d });
+
+      // Jumlah transaksi QRIS pending (badge/kartu)
+      api.get('/owner/laporan/pending', { params: { page: 1, pageSize: 1 } })
+        .then((pres) => { const pd = pres?.data || pres || {}; setPendingTotal(pd?.total || 0); })
+        .catch(() => { /* ignore */ });
     } catch {
       setDash(EMPTY_DASH);
       setError('Gagal memuat data dashboard. Coba lagi.');
@@ -384,8 +390,8 @@ export default function DashboardContent() {
           </div>
         </div>
 
-        {/* KPI: Laba + Transaksi + Stok Kritis */}
-        <div className="lg:col-span-12 grid grid-cols-2 lg:grid-cols-3 gap-3">
+        {/* KPI: Laba + Transaksi + Stok Kritis + QRIS Pending */}
+        <div className="lg:col-span-12 grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="rounded-[16px] p-3 min-h-[112px] bg-[#EAF3FF] shadow-sm">
             {isLoading ? (
               <div className="space-y-2"><div className="flex justify-between"><div className="h-3 w-16 rounded bg-blue-200/70 animate-pulse" /><div className="h-5 w-5 rounded bg-blue-200/70 animate-pulse" /></div><div className="h-6 w-20 rounded bg-blue-200/70 animate-pulse" /><div className="h-2.5 w-14 rounded bg-blue-200/60 animate-pulse" /></div>
@@ -422,6 +428,16 @@ export default function DashboardContent() {
                 </div>
               </>
             )}
+          </div>
+
+          {/* Kartu QRIS Pending */}
+          <div className="col-span-2 lg:col-span-1 rounded-[16px] p-3 min-h-[112px] bg-[#FFF8D9] shadow-sm flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white text-[#D97706] flex items-center justify-center shrink-0"><ScanLine className="w-5 h-5" /></div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium leading-4 text-[#B45309]">QRIS Pending</p>
+              <p className="text-[22px] font-medium leading-7">{pendingTotal} Transaksi</p>
+              <Link href="/owner/pos" className="inline-flex items-center gap-1 text-[11px] font-medium text-[#B45309] hover:underline">Approve <ChevronRight className="w-3 h-3" /></Link>
+            </div>
           </div>
         </div>
 

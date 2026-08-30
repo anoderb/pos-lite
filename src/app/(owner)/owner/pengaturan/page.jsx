@@ -10,7 +10,6 @@ import {
   Lock,
   Save,
   Wallet,
-  Banknote,
   QrCode,
   Upload,
   Info,
@@ -60,12 +59,8 @@ export default function OwnerPengaturanPage() {
   // Form Pembayaran
   const [payData, setPayData] = useState({
     qrisAktif: false,
-    transferAktif: false,
     merchantName: '',
     mid: '',
-    bankNama: '',
-    bankNoRekening: '',
-    bankAtasNama: '',
   });
   const [uploading, setUploading] = useState(''); // 'logo' | 'qris' | ''
   const logoInputRef = useRef(null);
@@ -87,6 +82,7 @@ export default function OwnerPengaturanPage() {
   useEffect(() => {
     fetchKasirList();
     fetchToko();
+    fetchQrisStatus();
   }, []);
 
   const fetchToko = async () => {
@@ -104,12 +100,8 @@ export default function OwnerPengaturanPage() {
         });
         setPayData({
           qrisAktif: d.qris_aktif === true,
-          transferAktif: d.transfer_aktif === true,
           merchantName: d.qris_merchant_name || '',
           mid: d.qris_mid || '',
-          bankNama: d.bank_nama || '',
-          bankNoRekening: d.bank_no_rekening || '',
-          bankAtasNama: d.bank_atas_nama || '',
         });
       }
     } catch { /* biarkan default */ }
@@ -182,17 +174,50 @@ export default function OwnerPengaturanPage() {
     try {
       await api.put('/owner/toko', {
         qris_aktif: payData.qrisAktif,
-        transfer_aktif: payData.transferAktif,
         qris_merchant_name: payData.merchantName,
         qris_mid: payData.mid,
-        bank_nama: payData.bankNama,
-        bank_no_rekening: payData.bankNoRekening,
-        bank_atas_nama: payData.bankAtasNama,
       });
       toast.success('Pengaturan pembayaran tersimpan.', { title: 'Berhasil!' });
       fetchToko();
     } catch (err) {
       toast.error(err.response?.data?.pesan || err.message, { title: 'Gagal Menyimpan' });
+    }
+  };
+
+  // Validasi & simpan QRIS string (dinamis)
+  const [qrisString, setQrisString] = useState('');
+  const [qrisInfo, setQrisInfo] = useState(null);
+  const [qrisStatus, setQrisStatus] = useState('empty'); // empty | valid | invalid
+  const [savingQris, setSavingQris] = useState(false);
+
+  const fetchQrisStatus = async () => {
+    try {
+      const res = await api.get('/owner/toko/qris/status');
+      const d = res?.data?.data || res?.data || {};
+      setQrisStatus(d.status || 'empty');
+      setQrisInfo(d.info || null);
+      if (d.qris_string) setQrisString(d.qris_string);
+    } catch { /* default */ }
+  };
+
+  const handleSaveQrisString = async () => {
+    if (!qrisString.trim()) {
+      toast.error('Tempel string QRIS terlebih dahulu.', { title: 'QRIS Kosong' });
+      return;
+    }
+    setSavingQris(true);
+    try {
+      const res = await api.put('/owner/toko/qris', { qris_string: qrisString.trim() });
+      const d = res?.data?.data || res?.data || {};
+      setQrisStatus(d.qris_status || 'valid');
+      setQrisInfo(d.qris_info || null);
+      toast.success(d.pesan || 'QRIS berhasil disimpan & diaktifkan.', { title: 'QRIS Valid' });
+    } catch (err) {
+      setQrisStatus('invalid');
+      setQrisInfo(null);
+      toast.error(err.response?.data?.pesan || err.message, { title: 'QRIS Tidak Valid' });
+    } finally {
+      setSavingQris(false);
     }
   };
 
@@ -424,17 +449,55 @@ export default function OwnerPengaturanPage() {
             </div>
           </section>
 
-          {/* Rekening */}
+          {/* QRIS Dinamis */}
           <section className="rounded-[18px] bg-white p-4 lg:p-5 shadow-sm border border-gray-50 space-y-3 lg:col-start-2 lg:row-start-2 lg:self-start">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm lg:text-base font-medium leading-5 flex items-center gap-2"><Banknote className="w-4 h-4 text-violet-600" /> Rekening Bank</h2>
-              <Toggle value={payData.transferAktif} onChange={v => setPayData({ ...payData, transferAktif: v })} />
+              <h2 className="text-sm lg:text-base font-medium leading-5 flex items-center gap-2"><QrCode className="w-4 h-4 text-violet-600" /> QRIS Dinamis</h2>
+              {qrisStatus === 'valid' ? (
+                <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-[#E8FAF0] text-[#087A4B]">✓ Valid</span>
+              ) : qrisStatus === 'invalid' ? (
+                <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-[#FFF0F0] text-[#D94850]">✕ Tidak Valid</span>
+              ) : (
+                <span className="text-[9px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-[#68758A]">Belum Diatur</span>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Input label="Nama Bank" placeholder="BCA" value={payData.bankNama} onChange={e => setPayData({ ...payData, bankNama: e.target.value })} />
-              <Input label="No. Rekening" placeholder="1234567890" value={payData.bankNoRekening} onChange={e => setPayData({ ...payData, bankNoRekening: e.target.value })} />
+            <div>
+              <label className="text-[10px] font-medium text-[#10233E] block mb-1">String QRIS (payload)</label>
+              <textarea
+                value={qrisString}
+                onChange={(e) => setQrisString(e.target.value)}
+                placeholder="Tempel string QRIS asli di sini, mis: 00020101021126600009ID.CO...."
+                rows={3}
+                className="w-full text-[11px] font-mono px-3 py-2 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#0CAF60]/30 placeholder:text-gray-300 resize-none"
+              />
+              <p className="text-[9px] font-normal text-[#68758A] mt-1 leading-4">
+                Hasil validasi otomatis saat disimpan. QRIS yang valid akan dipakai untuk menghasilkan QR dinamis berisi nominal di kasir.
+              </p>
             </div>
-            <Input label="Atas Nama" placeholder="Khamdanu Syakir" value={payData.bankAtasNama} onChange={e => setPayData({ ...payData, bankAtasNama: e.target.value })} />
+            {qrisInfo && (
+              <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#F8FAFB] p-2.5">
+                <div>
+                  <p className="text-[9px] font-normal text-[#68758A]">Merchant</p>
+                  <p className="text-[10px] font-medium text-[#10233E] truncate">{qrisInfo.merchant_name || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-normal text-[#68758A]">Kota</p>
+                  <p className="text-[10px] font-medium text-[#10233E] truncate">{qrisInfo.merchant_city || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-normal text-[#68758A]">Merchant ID</p>
+                  <p className="text-[10px] font-medium text-[#10233E] truncate">{qrisInfo.merchant_id || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-normal text-[#68758A]">Tipe</p>
+                  <p className="text-[10px] font-medium text-[#10233E] capitalize">{qrisInfo.method === 'dynamic' ? 'Dinamis' : 'Statis'}</p>
+                </div>
+              </div>
+            )}
+            <button onClick={handleSaveQrisString} disabled={savingQris} className="w-full py-2.5 bg-[#10233E] text-white rounded-xl text-[11px] font-medium hover:bg-[#1d3a5f] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+              <Save className="w-3.5 h-3.5" />
+              {savingQris ? 'Memvalidasi...' : 'Simpan & Validasi QRIS'}
+            </button>
           </section>
 
           <div className="space-y-2 lg:col-start-1 lg:row-start-3 lg:self-start">
@@ -442,7 +505,7 @@ export default function OwnerPengaturanPage() {
               <Save className="w-4 h-4" />
               Simpan Pengaturan Pembayaran
             </button>
-            <p className="text-[9px] font-normal text-[#68758A] text-center leading-4">Metode yang OFF atau belum lengkap tidak akan muncul di halaman pembayaran kasir. Jika QRIS &amp; Rekening tidak aktif, hanya Tunai yang tersedia.</p>
+            <p className="text-[9px] font-normal text-[#68758A] text-center leading-4">Metode yang OFF atau belum lengkap tidak akan muncul di halaman pembayaran kasir. Jika QRIS tidak diaktifkan, hanya Tunai yang tersedia.</p>
           </div>
       </div>
 

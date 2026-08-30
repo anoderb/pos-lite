@@ -20,7 +20,6 @@ import {
   Share2,
   Banknote,
   QrCode,
-  Building2,
   User,
   UserPlus,
   ArrowRight,
@@ -89,6 +88,14 @@ export default function KasirPosPage() {
   const [uangDiterima, setUangDiterima] = useState('');
   const [completedTx, setCompletedTx] = useState(null);
 
+  // QRIS pending (dynamic QR + approval manual)
+  const [qrisPendingTx, setQrisPendingTx] = useState(null); // { id, qris_payload, total, ...receipt tx }
+  const [showQrisPending, setShowQrisPending] = useState(false);
+  const [showQrisCancelModal, setShowQrisCancelModal] = useState(false);
+  const [qrisCancelReason, setQrisCancelReason] = useState('');
+  const [qrisCancelError, setQrisCancelError] = useState('');
+  const [qrisActionLoading, setQrisActionLoading] = useState(false);
+
   // AI & Barcode scanning state
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectedProduk, setDetectedProduk] = useState(null);
@@ -126,6 +133,8 @@ export default function KasirPosPage() {
   const [riwayatPage, setRiwayatPage] = useState(1);
   const [riwayatPages, setRiwayatPages] = useState(1);
   const [isRiwayatLoading, setIsRiwayatLoading] = useState(true);
+  const [riwayatFilter, setRiwayatFilter] = useState('semua'); // 'semua' | 'pending'
+  const [riwayatPendingTotal, setRiwayatPendingTotal] = useState(0);
 
   // Katalog: pagination + tampilan grid/list + urutan
   const [produkPage, setProdukPage] = useState(1);
@@ -137,22 +146,47 @@ export default function KasirPosPage() {
   const [showPay, setShowPay] = useState(false); // true = payment sheet/inline terbuka
   const [payStep, setPayStep] = useState('cart'); // 'cart' | 'pay' — desktop hanya
 
-  const METODE_LABEL = { cash: 'Tunai', qris: 'QRIS', transfer: 'Transfer' };
+  const METODE_LABEL = { cash: 'Tunai', qris: 'QRIS' };
   const METODE_BADGE = {
     cash: 'bg-[#E8FAF0] text-[#087A4B]',
     qris: 'bg-[#F3EEFF] text-violet-600',
-    transfer: 'bg-[#EAF3FF] text-blue-600',
   };
   const METODE_ICON_BG = {
     cash: 'bg-[#E8FAF0] text-[#0CAF60]',
     qris: 'bg-[#F3EEFF] text-violet-600',
-    transfer: 'bg-[#EAF3FF] text-blue-600',
   };
 
   const fetchRiwayat = async (page = riwayatPage) => {
     try {
       setIsRiwayatLoading(true);
       const res = await api.get('/owner/laporan/riwayat', { params: { page, pageSize: 10 } });
+      const d = res?.data || res || {};
+
+      // Ambil jumlah pending utk badge (tanpa loading ganda)
+      api.get('/owner/laporan/pending', { params: { page: 1, pageSize: 1 } })
+        .then((pres) => { const pd = pres?.data || pres || {}; setRiwayatPendingTotal(pd?.total || 0); })
+        .catch(() => { /* ignore */ });
+
+      setRiwayat(Array.isArray(d.data) ? d.data : []);
+      setRiwayatTotal(d.total || 0);
+      setRiwayatPages(d.totalPages || 1);
+      setRiwayatPage(Math.min(Math.max(1, d.page || 1), d.totalPages || 1));
+      setRiwayatFilter('semua');
+    } catch {
+      setRiwayat([]);
+      setRiwayatTotal(0);
+    } finally {
+      setIsRiwayatLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchRiwayat(1); }, []);
+
+  // Fetch transaksi QRIS pending (untuk filter Pending di riwayat)
+  const fetchPendingRiwayat = async (page = 1) => {
+    try {
+      setIsRiwayatLoading(true);
+      const res = await api.get('/owner/laporan/pending', { params: { page, pageSize: 10 } });
       const d = res?.data || res || {};
       setRiwayat(Array.isArray(d.data) ? d.data : []);
       setRiwayatTotal(d.total || 0);
@@ -166,7 +200,47 @@ export default function KasirPosPage() {
     }
   };
 
-  useEffect(() => { fetchRiwayat(1); }, []);
+  const reloadRiwayatPage = (page) => (riwayatFilter === 'pending' ? fetchPendingRiwayat(page) : fetchRiwayat(page));
+
+  const switchRiwayatFilter = (f) => {
+    setRiwayatFilter(f);
+    setRiwayatPage(1);
+    if (f === 'pending') fetchPendingRiwayat(1);
+    else fetchRiwayat(1);
+  };
+
+  // Klik nomor transaksi di riwayat → buka struk (tanpa harus baru checkout)
+  const openStrukRiwayat = (t) => {
+    if (!t) return;
+    const kasirNama = typeof t.kasir === 'object' && t.kasir ? (t.kasir.nama || 'Kasir') : (t.kasir || 'Kasir');
+    setCompletedTx({
+      nomor_transaksi: t.nomor_transaksi || '-',
+      tanggal: t.created_at ? new Date(t.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '',
+      waktu: t.created_at ? new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB' : '',
+      total: Number(t.total || 0),
+      uang_diterima: Number(t.total || 0),
+      kembalian: 0,
+      items: Array.isArray(t.items) ? t.items : [],
+      kasir: kasirNama,
+      toko: toko?.nama || 'Toko',
+      toko_alamat: toko?.alamat || '',
+      pelanggan: typeof t.pelanggan === 'object' && t.pelanggan ? (t.pelanggan.nama || 'Pelanggan Umum') : 'Pelanggan Umum',
+      metode_bayar: t.metode_bayar || 'cash',
+      status_qris: t.status_qris || null,
+      alasan_batal: t.alasan || t.alasan_batal || '',
+    });
+    setShowReceipt(true);
+  };
+
+  // Badge status transaksi: pending=kuning, dibatalkan=merah, selesai=hijau
+  const statusBadgeRiwayat = (t) => {
+    const sq = String(t.status_qris || '').toLowerCase();
+    const st = String(t.status || '').toLowerCase();
+    if (sq === 'pending' || st === 'pending') return { label: 'Pending', cls: 'bg-[#FFF8D9] text-amber-600' };
+    if (['cancelled', 'cancel', 'dibatalkan', 'void', 'batal'].some((k) => sq === k || st === k)) return { label: 'Batal', cls: 'bg-[#FFF0F0] text-[#D94850]' };
+    return { label: 'Sukses', cls: 'bg-[#E8FAF0] text-[#087A4B]' };
+  };
+
 
   const formatRiwayatWaktu = (iso) => {
     if (!iso) return '—';
@@ -220,11 +294,10 @@ export default function KasirPosPage() {
     } catch { setTokoPay(null); }
   };
 
-  // Metode tersedia: tunai selalu; qris/transfer hanya jika aktif + lengkap
+  // Metode tersedia: tunai selalu; qris hanya jika aktif + lengkap
   const metodeTersedia = [
     { id: 'cash', label: 'Tunai', icon: Banknote },
-    ...(tokoPay?.qris_aktif && tokoPay?.qris_url ? [{ id: 'qris', label: 'QRIS', icon: QrCode }] : []),
-    ...(tokoPay?.transfer_aktif && tokoPay?.bank_no_rekening ? [{ id: 'transfer', label: 'Transfer', icon: Building2 }] : []),
+    ...(tokoPay?.qris_aktif && tokoPay?.qris_status === 'valid' ? [{ id: 'qris', label: 'QRIS', icon: QrCode }] : []),
   ];
 
   // Fallback: metode terpilih tidak tersedia → kembalikan ke tunai
@@ -865,12 +938,13 @@ export default function KasirPosPage() {
     }
   };
 
-  // Sembunyikan bottom nav saat struk tampil (full-screen)
+  // Sembunyikan bottom nav saat struk / panel QRIS tampil (full-screen)
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.dispatchEvent(new CustomEvent(showReceipt ? 'owner-nav-hide' : 'owner-nav-show'));
+    const overlayOpen = showReceipt || showQrisPending;
+    window.dispatchEvent(new CustomEvent(overlayOpen ? 'owner-nav-hide' : 'owner-nav-show'));
     return () => window.dispatchEvent(new CustomEvent('owner-nav-show'));
-  }, [showReceipt]);
+  }, [showReceipt, showQrisPending]);
 
   /* ── Checkout ── */
   const handleBayar = async () => {
@@ -903,6 +977,7 @@ export default function KasirPosPage() {
       const data = res?.data || {};
 
       const tx = {
+        id: data.id,
         nomor_transaksi: data.nomor_transaksi || `#TRK-${Date.now().toString().slice(-6)}`,
         tanggal: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
         waktu: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
@@ -915,7 +990,22 @@ export default function KasirPosPage() {
         toko_alamat: toko?.alamat || '',
         pelanggan: selectedCustomer?.nama || 'Pelanggan Umum',
         metode_bayar: metodeBayar,
+        status_qris: data.status_qris || null,
       };
+
+      // QRIS → backend bikin transaksi pending (dynamic QR). Tampilkan panel QR dulu, jangan struk.
+      if (metodeBayar === 'qris' && (data.status === 'pending' || data.status_qris === 'pending')) {
+        setQrisPendingTx({ ...tx, qris_payload: data.qris_payload || '' });
+        setShowPay(false);
+        setPayStep('cart');
+        setPayError(null);
+        setUangDiterima('');
+        setShowQrisPending(true);
+        fetchProduk();
+        fetchTodayStats();
+        fetchRiwayat(1);
+        return;
+      }
 
       setCompletedTx(tx);
       setShowPay(false);
@@ -943,7 +1033,65 @@ export default function KasirPosPage() {
     setShowReceipt(false);
     setShowPay(false);
     setPayStep('cart');
+    setShowQrisPending(false);
+    setQrisPendingTx(null);
+    setShowQrisCancelModal(false);
+    setQrisCancelReason('');
+    setQrisCancelError('');
     setView('home');
+  };
+
+  // QRIS pending: setujui bayar → tampilkan struk (+ refresh riwayat)
+  const handleApproveQris = async () => {
+    if (!qrisPendingTx?.id || qrisActionLoading) return;
+    setQrisActionLoading(true);
+    try {
+      await api.post(`/kasir/transaksi/${qrisPendingTx.id}/qris/approve`, { alasan: 'dibayar' });
+      setCompletedTx(qrisPendingTx);
+      setShowQrisPending(false);
+      setQrisPendingTx(null);
+      setCart([]);
+      setDiskon(0);
+      setShowReceipt(true);
+      fetchProduk();
+      fetchTodayStats();
+      fetchRiwayat(1);
+      showFeedback('success', 'Pembayaran Dikonfirmasi', 'Transaksi QRIS telah disetujui.');
+    } catch (err) {
+      showFeedback('error', 'Gagal Menyetujui', err.response?.data?.pesan || err.message || 'Terjadi kesalahan.');
+    } finally {
+      setQrisActionLoading(false);
+    }
+  };
+
+  // QRIS pending: batalkan transaksi (alasan wajib)
+  const handleCancelQris = async () => {
+    const alasan = (qrisCancelReason || '').trim();
+    if (!alasan) {
+      setQrisCancelError('Alasan pembatalan wajib diisi.');
+      return;
+    }
+    if (!qrisPendingTx?.id || qrisActionLoading) return;
+    setQrisActionLoading(true);
+    try {
+      await api.post(`/kasir/transaksi/${qrisPendingTx.id}/qris/cancel`, { alasan });
+      setShowQrisCancelModal(false);
+      setShowQrisPending(false);
+      setQrisPendingTx(null);
+      setQrisCancelReason('');
+      setQrisCancelError('');
+      setCart([]);
+      setDiskon(0);
+      setUangDiterima('');
+      fetchProduk();
+      fetchTodayStats();
+      fetchRiwayat(1);
+      showFeedback('info', 'Transaksi Dibatalkan', 'Transaksi QRIS telah dibatalkan.');
+    } catch (err) {
+      setQrisCancelError(err.response?.data?.pesan || err.message || 'Terjadi kesalahan.');
+    } finally {
+      setQrisActionLoading(false);
+    }
   };
 
   const filteredProdukSemua = produkList.filter(p => {
@@ -1295,8 +1443,7 @@ export default function KasirPosPage() {
               {(
                 [
                   { id: 'cash', label: 'Tunai', icon: Banknote, tersedia: true },
-                  { id: 'qris', label: 'QRIS', icon: QrCode, tersedia: !!(tokoPay?.qris_aktif && tokoPay?.qris_url) },
-                  { id: 'transfer', label: 'Transfer', icon: Building2, tersedia: !!(tokoPay?.transfer_aktif && tokoPay?.bank_no_rekening) },
+                  { id: 'qris', label: 'QRIS', icon: QrCode, tersedia: !!(tokoPay?.qris_aktif && tokoPay?.qris_status === 'valid') },
                 ]
               ).map(m => {
                 const isSel = metodeBayar === m.id && m.tersedia;
@@ -1443,8 +1590,7 @@ export default function KasirPosPage() {
               {(
                 [
                   { id: 'cash', label: 'Tunai', icon: Banknote, tersedia: true },
-                  { id: 'qris', label: 'QRIS', icon: QrCode, tersedia: !!(tokoPay?.qris_aktif && tokoPay?.qris_url) },
-                  { id: 'transfer', label: 'Transfer', icon: Building2, tersedia: !!(tokoPay?.transfer_aktif && tokoPay?.bank_no_rekening) },
+                  { id: 'qris', label: 'QRIS', icon: QrCode, tersedia: !!(tokoPay?.qris_aktif && tokoPay?.qris_status === 'valid') },
                 ]
               ).map(m => {
                 const isSel = metodeBayar === m.id && m.tersedia;
@@ -1489,9 +1635,23 @@ export default function KasirPosPage() {
             <span className="w-7 h-7 rounded-lg bg-[#E8FAF0] text-[#0CAF60] flex items-center justify-center"><ReceiptText className="w-3.5 h-3.5" /></span>
             <span className="text-[13px] font-medium text-[#10233E]">History Transaksi</span>
           </div>
-          {!isRiwayatLoading && riwayatTotal > 0 && (
-            <span className="text-[10px] font-normal text-[#68758A]">{riwayatTotal} transaksi</span>
-          )}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => switchRiwayatFilter('semua')}
+              className={cn('px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors', riwayatFilter === 'semua' ? 'bg-[#0CAF60] text-white' : 'bg-gray-100 text-[#68758A] hover:bg-gray-200')}
+            >
+              Semua
+            </button>
+            <button
+              onClick={() => switchRiwayatFilter('pending')}
+              className={cn('px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors flex items-center gap-1', riwayatFilter === 'pending' ? 'bg-[#0CAF60] text-white' : 'bg-gray-100 text-[#68758A] hover:bg-gray-200')}
+            >
+              Pending
+              {riwayatPendingTotal > 0 && (
+                <span className={cn('w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center', riwayatFilter === 'pending' ? 'bg-white/25' : 'bg-[#F59E0B] text-white')}>{riwayatPendingTotal}</span>
+              )}
+            </button>
+          </div>
         </div>
 
         {isRiwayatLoading ? (
@@ -1511,13 +1671,17 @@ export default function KasirPosPage() {
           <div className="px-4 py-8 text-center">
             <div className="w-12 h-12 rounded-full bg-[#E8FAF0] flex items-center justify-center mx-auto mb-2 text-[#0CAF60]"><ReceiptText className="w-5 h-5" /></div>
             <p className="text-[11px] font-medium text-[#10233E]">Belum Ada Transaksi</p>
-            <p className="text-[10px] font-normal text-[#68758A] mt-0.5">Transaksi yang selesai akan tampil di sini.</p>
+            <p className="text-[10px] font-normal text-[#68758A] mt-0.5">{riwayatFilter === 'pending' ? 'Tidak ada transaksi QRIS yang menunggu persetujuan.' : 'Transaksi yang selesai akan tampil di sini.'}</p>
           </div>
         ) : (
           <>
             <div className="px-4 py-1 divide-y divide-gray-50">
               {riwayat.map(t => (
-                <div key={t.id} className="flex items-center gap-2.5 py-2.5">
+                <button
+                  key={t.id}
+                  onClick={() => openStrukRiwayat(t)}
+                  className="w-full flex items-center gap-2.5 py-2.5 text-left hover:bg-gray-50/70 transition-colors rounded-lg"
+                >
                   <span className={cn('w-9 h-9 rounded-xl flex flex-col items-center justify-center shrink-0', METODE_ICON_BG[t.metode_bayar] || METODE_ICON_BG.cash)}>
                     <Banknote className="w-4 h-4" />
                   </span>
@@ -1525,12 +1689,7 @@ export default function KasirPosPage() {
                     <p className="text-[11px] font-medium text-[#10233E] font-mono truncate">{t.nomor_transaksi}</p>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span className="text-[9px] font-normal text-[#68758A]">{formatRiwayatWaktu(t.created_at)}</span>
-                      <span className={cn(
-                        'text-[8px] font-medium px-1.5 py-px rounded-full',
-                        METODE_BADGE[t.metode_bayar] || METODE_BADGE.cash
-                      )}>
-                        {METODE_LABEL[t.metode_bayar] || t.metode_bayar}
-                      </span>
+                      {statusBadgeRiwayat(t)}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -1539,7 +1698,7 @@ export default function KasirPosPage() {
                       <p className="text-[8px] font-normal text-[#F59E0B]">Diskon {formatRupiah(t.diskon_total)}</p>
                     )}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
 
@@ -1547,7 +1706,7 @@ export default function KasirPosPage() {
             {riwayatPages > 1 && (
               <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-50 bg-[#FAFBFC]">
                 <button
-                  onClick={() => fetchRiwayat(riwayatPage - 1)}
+                  onClick={() => reloadRiwayatPage(riwayatPage - 1)}
                   disabled={riwayatPage <= 1 || isRiwayatLoading}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-gray-100 text-[10px] font-medium text-[#68758A] shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all disabled:opacity-40 disabled:pointer-events-none"
                 >
@@ -1555,7 +1714,7 @@ export default function KasirPosPage() {
                 </button>
                 <span className="text-[10px] font-normal text-[#68758A]">Halaman {riwayatPage} dari {riwayatPages}</span>
                 <button
-                  onClick={() => fetchRiwayat(riwayatPage + 1)}
+                  onClick={() => reloadRiwayatPage(riwayatPage + 1)}
                   disabled={riwayatPage >= riwayatPages || isRiwayatLoading}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-gray-100 text-[10px] font-medium text-[#68758A] shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all disabled:opacity-40 disabled:pointer-events-none"
                 >
@@ -1940,6 +2099,7 @@ export default function KasirPosPage() {
 
       {renderCustomerSheet()}
       {renderPaymentSheet()}
+      {renderQrisPending()}
       {renderReceiptModal()}
 
     </div>
@@ -2122,12 +2282,134 @@ export default function KasirPosPage() {
   }
 
   /* ════════════════════════════════════════════════════
+     SCREEN 6B: QRIS PENDING (Approval Manual, Full Modal)
+     ════════════════════════════════════════════════════ */
+  function renderQrisPending() {
+    if (!showQrisPending || !qrisPendingTx) return null;
+    const qt = qrisPendingTx;
+    const merchantNama = tokoPay?.qris_info?.merchant_name || toko?.nama || 'Tokiva';
+    const qrSrc = qt.qris_payload
+      ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qt.qris_payload)}&size=240x240`
+      : '';
+    return (
+      <>
+        <div className="hidden lg:block fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fade-in" />
+        <div className="fixed inset-0 z-50 bg-[#F8FAF9] flex flex-col items-center justify-center overflow-y-auto animate-fade-in lg:bg-transparent">
+          <div className="w-full max-w-[430px] mx-auto px-4 py-6 lg:max-w-md lg:bg-white lg:rounded-2xl lg:shadow-2xl lg:p-5 lg:max-h-[92vh] lg:overflow-y-auto">
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 bg-[#FFF8D9] rounded-full flex items-center justify-center mx-auto">
+                <QrCode className="w-8 h-8 text-amber-500" />
+              </div>
+              <h2 className="text-[17px] font-semibold text-[#10233E] mt-2">Menunggu Pembayaran QRIS</h2>
+              <p className="text-[11px] font-normal text-[#68758A] mt-0.5">Pindai QR dengan aplikasi QRIS pelanggan, lalu konfirmasi di sini.</p>
+            </div>
+
+            <div className="bg-white rounded-[16px] shadow-sm border border-gray-100 p-4">
+              {/* QR */}
+              <div className="flex justify-center mb-3">
+                {qrSrc ? (
+                  <img
+                    src={qrSrc}
+                    alt="QRIS"
+                    className="w-56 h-56 rounded-xl bg-white border border-gray-100"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                ) : (
+                  <div className="w-56 h-56 rounded-xl bg-gray-50 border border-dashed border-gray-200 flex items-center justify-center text-[10px] text-[#68758A]">
+                    QR tidak tersedia
+                  </div>
+                )}
+              </div>
+
+              {/* Merchant + total */}
+              <div className="text-center space-y-1">
+                <p className="text-xs font-semibold text-[#10233E]">{merchantNama}</p>
+                <p className="text-[10px] font-normal text-[#68758A]">{qt.nomor_transaksi}</p>
+              </div>
+              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                <span className="text-[10px] font-normal text-[#68758A]">Total Bayar</span>
+                <span className="text-xl font-semibold text-[#0CAF60]">{formatRupiah(qt.total)}</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-2 mt-4">
+              <button
+                onClick={handleApproveQris}
+                disabled={qrisActionLoading}
+                className="w-full flex items-center justify-center gap-2 bg-[#0CAF60] hover:bg-[#087A4B] text-white font-medium py-3.5 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-50 shadow-sm"
+              >
+                {qrisActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                {qrisActionLoading ? 'Memproses...' : 'Approve Pembayaran'}
+              </button>
+              <button
+                onClick={() => { setQrisCancelError(''); setQrisCancelReason(''); setShowQrisCancelModal(true); }}
+                disabled={qrisActionLoading}
+                className="w-full flex items-center justify-center gap-2 bg-[#FFF0F0] border border-[#F5C6C9] text-[#D94850] font-medium py-3 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-50"
+              >
+                <XCircle className="w-4 h-4" />
+                Batalkan Transaksi
+              </button>
+              <button
+                onClick={handleNewTransaction}
+                className="w-full text-[11px] font-normal text-[#68758A] hover:text-[#10233E] transition-colors py-1"
+              >
+                Kembali ke Home (abaikan QR)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal alasan batal (alasan wajib) */}
+        {showQrisCancelModal && (
+          <>
+            <div onClick={() => !qrisActionLoading && setShowQrisCancelModal(false)} className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm animate-fade-in" />
+            <div className="fixed left-0 right-0 top-1/2 -translate-y-1/2 z-[70] mx-auto max-w-sm bg-white rounded-2xl shadow-2xl p-5 animate-fade-in">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-[#10233E]">Alasan Pembatalan</h3>
+                <button onClick={() => !qrisActionLoading && setShowQrisCancelModal(false)} className="p-1"><X className="w-4 h-4 text-[#68758A]" /></button>
+              </div>
+              <p className="text-[10px] font-normal text-[#68758A] mb-2">Alasan wajib diisi sebelum transaksi QRIS dibatalkan.</p>
+              <textarea
+                value={qrisCancelReason}
+                onChange={(e) => { setQrisCancelReason(e.target.value); setQrisCancelError(''); }}
+                placeholder="Contoh: pelanggan membatalkan pembayaran..."
+                rows={3}
+                className="w-full px-3 py-2.5 bg-[#FAFBFC] border border-gray-100 rounded-xl text-xs text-[#10233E] outline-none focus:border-[#D94850] resize-none"
+              />
+              {qrisCancelError && (
+                <p className="text-[10px] font-normal text-[#D94850] mt-1.5">{qrisCancelError}</p>
+              )}
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => setShowQrisCancelModal(false)}
+                  disabled={qrisActionLoading}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-medium text-[#68758A] bg-white border border-gray-100 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Tutup
+                </button>
+                <button
+                  onClick={handleCancelQris}
+                  disabled={qrisActionLoading}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-medium text-white bg-[#D94850] hover:bg-[#c13f46] transition-colors disabled:opacity-50"
+                >
+                  {qrisActionLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Ya, Batalkan'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </>
+    );
+  }
+
+  /* ════════════════════════════════════════════════════
      SCREEN 7: STRUK BERHASIL (Full Modal)
      ════════════════════════════════════════════════════ */
   function renderReceiptModal() {
     if (!showReceipt || !completedTx) return null;
     const tx = completedTx;
-    const metodeLabel = { cash: 'Tunai', qris: 'QRIS', transfer: 'Transfer Bank' }[tx.metode_bayar] || 'Tunai';
+    const metodeLabel = { cash: 'Tunai', qris: 'QRIS' }[tx.metode_bayar] || 'Tunai';
 
     const shareStruk = async () => {
       const lines = [
@@ -2205,6 +2487,8 @@ export default function KasirPosPage() {
               <div className="flex justify-between"><span className="text-[#68758A]">Kasir</span><span>{tx.kasir}</span></div>
               <div className="flex justify-between"><span className="text-[#68758A]">Pelanggan</span><span>{tx.pelanggan}</span></div>
               <div className="flex justify-between"><span className="text-[#68758A]">Metode</span><span>{metodeLabel}</span></div>
+              {tx.status_qris === 'pending' && <div className="flex justify-between"><span className="text-[#68758A]">Status</span><span className="text-amber-600">Pending</span></div>}
+              {tx.alasan_batal && <div className="flex justify-between"><span className="text-[#68758A]">Catatan</span><span className="text-[#D94850]">{tx.alasan_batal}</span></div>}
             </div>
 
             <div className="border-t border-dashed border-gray-200 my-1" />
