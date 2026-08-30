@@ -15,9 +15,11 @@ import {
   Upload,
   Info,
   X,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { APP_NAME } from '@/lib/config';
+import jsQR from 'jsqr';
 import Skeleton from '@/components/ui/Skeleton';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
@@ -161,12 +163,42 @@ export default function OwnerPengaturanPage() {
     if (!file) return;
     try {
       setUploading('qris');
-      const dataUrl = await fileToDataUrl(file);
-      await api.post('/owner/toko/qris', { qris_url: dataUrl });
-      toast.success('Gambar QRIS berhasil disimpan.', { title: 'QRIS Terupload' });
-      await fetchToko();
+
+      // Decode QRIS dari gambar -> string (pakai jsQR + canvas)
+      const img = await createImageBitmap(file);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+
+      if (!code || !code.data) {
+        toast.error('Tidak dapat membaca QR dari gambar. Pastikan gambar QRIS jelas & tidak buram.', { title: 'QR Tidak Terbaca' });
+        return;
+      }
+
+      const decoded = String(code.data).trim();
+      setQrisString(decoded);
+
+      // Auto-validasi string yang berhasil di-decode
+      setSavingQris(true);
+      try {
+        const res = await api.put('/owner/toko/qris', { qris_string: decoded });
+        const d = res?.data?.data || res?.data || {};
+        setQrisStatus(d.qris_status || 'valid');
+        setQrisInfo(d.qris_info || null);
+        toast.success(d.pesan || 'QRIS berhasil dibaca & diverifikasi.', { title: 'QRIS Valid' });
+      } catch (err) {
+        setQrisStatus('invalid');
+        setQrisInfo(null);
+        toast.error(err.response?.data?.pesan || err.message, { title: 'QRIS Tidak Valid' });
+      } finally {
+        setSavingQris(false);
+      }
     } catch (err) {
-      toast.error(err.response?.data?.pesan || err.message, { title: 'Upload Gagal' });
+      toast.error(err.message || 'Gagal membaca gambar QRIS.', { title: 'Gagal Membaca QR' });
     } finally {
       setUploading('');
       if (qrisInputRef.current) qrisInputRef.current.value = '';
@@ -509,22 +541,36 @@ export default function OwnerPengaturanPage() {
               )}
             </div>
             <div>
-              <label className="text-[10px] font-medium text-[#10233E] block mb-1">String QRIS (payload)</label>
-              <textarea
-                value={qrisString}
-                onChange={(e) => setQrisString(e.target.value)}
-                placeholder="Tempel string QRIS asli di sini, mis: 00020101021126600009ID.CO...."
-                rows={3}
-                className="w-full text-[11px] font-mono px-3 py-2 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#0CAF60]/30 placeholder:text-gray-300 resize-none"
-              />
-              <p className="text-[9px] font-normal text-[#68758A] mt-1 leading-4">
-                Hasil validasi otomatis saat disimpan. QRIS yang valid akan dipakai untuk menghasilkan QR dinamis berisi nominal di kasir.
+              <label className="text-[10px] font-medium text-[#10233E] block mb-1.5">Foto Barcode QRIS</label>
+              <button
+                onClick={() => qrisInputRef.current?.click()}
+                disabled={uploading === 'qris' || savingQris}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 hover:bg-[#E8FAF0] hover:border-[#0CAF60] transition-all text-[11px] font-medium text-[#68758A] active:scale-[0.98] disabled:opacity-50"
+              >
+                {uploading === 'qris' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {uploading === 'qris' ? 'Membaca QRIS...' : savingQris ? 'Memvalidasi...' : 'Unggah Foto Barcode QRIS'}
+              </button>
+              <input ref={qrisInputRef} type="file" accept="image/*" onChange={handleUploadQris} className="hidden" />
+              <p className="text-[9px] font-normal text-[#68758A] mt-1.5 leading-4">
+                Foto barcode QRIS dari toko Anda (dari penyedia QRIS). Sistem otomatis membaca, memeriksa kevalidannya, lalu memakainya untuk QR pembayaran berisi nominal di kasir.
               </p>
             </div>
+
+            {(qrisString || qrisInfo) && (
+              <div>
+                <label className="text-[10px] font-medium text-[#10233E] block mb-1">Hasil Baca</label>
+                <textarea
+                  value={qrisString}
+                  onChange={(e) => setQrisString(e.target.value)}
+                  rows={3}
+                  className="w-full text-[11px] font-mono px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0CAF60]/30 resize-none"
+                />
+              </div>
+            )}
             {qrisInfo && (
               <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#F8FAFB] p-2.5">
                 <div>
-                  <p className="text-[9px] font-normal text-[#68758A]">Merchant</p>
+                  <p className="text-[9px] font-normal text-[#68758A]">Nama Merchant</p>
                   <p className="text-[10px] font-medium text-[#10233E] truncate">{qrisInfo.merchant_name || '-'}</p>
                 </div>
                 <div>
@@ -532,7 +578,7 @@ export default function OwnerPengaturanPage() {
                   <p className="text-[10px] font-medium text-[#10233E] truncate">{qrisInfo.merchant_city || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-[9px] font-normal text-[#68758A]">Merchant ID</p>
+                  <p className="text-[9px] font-normal text-[#68758A]">ID Merchant</p>
                   <p className="text-[10px] font-medium text-[#10233E] truncate">{qrisInfo.merchant_id || '-'}</p>
                 </div>
                 <div>
@@ -541,10 +587,11 @@ export default function OwnerPengaturanPage() {
                 </div>
               </div>
             )}
-            <button onClick={handleSaveQrisString} disabled={savingQris} className="w-full py-2.5 bg-[#10233E] text-white rounded-xl text-[11px] font-medium hover:bg-[#1d3a5f] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
-              <Save className="w-3.5 h-3.5" />
-              {savingQris ? 'Memvalidasi...' : 'Simpan & Validasi QRIS'}
-            </button>
+            {qrisStatus === 'invalid' && (
+              <div className="rounded-xl bg-[#FFF0F0] p-2.5 text-[10px] font-normal text-[#D94850] leading-4">
+                Barcode QRIS tidak valid. Periksa kembali foto & pastikan itu barcode QRIS dari penyedia (GoPay/OVO/DANA/bank).
+              </div>
+            )}
           </section>
 
           <div className="space-y-2 lg:col-start-1 lg:row-start-4 lg:self-start">
