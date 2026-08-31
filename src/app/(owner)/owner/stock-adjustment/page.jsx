@@ -500,7 +500,6 @@ export default function OwnerStockAdjustmentPage() {
               <option value="Pembelian stok baru">Pembelian stok baru</option>
               <option value="Retur dari pelanggan">Retur dari pelanggan</option>
               <option value="Produk rusak / kadaluarsa">Produk rusak / kadaluarsa</option>
-              <option value="Koreksi hasil opname">Koreksi hasil opname</option>
               <option value="Lainnya">Lainnya</option>
             </select>
           </div>

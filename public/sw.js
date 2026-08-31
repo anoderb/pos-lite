@@ -1,5 +1,5 @@
 // Service Worker Tokiva — cache ringan untuk PWA installable
-const CACHE_NAME = 'tokiva-pwa-v1';
+const CACHE_NAME = 'tokiva-pwa-v2';
 const APP_SHELL = [
   '/login',
   '/manifest.webmanifest',
