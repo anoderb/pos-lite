@@ -17,11 +17,8 @@ import {
   X,
   CheckCircle,
   XCircle,
-  Share2,
   Banknote,
   QrCode,
-  User,
-  UserPlus,
   ArrowRight,
   Info,
   Loader2,
@@ -37,118 +34,150 @@ import { cn, formatRupiah } from '@/lib/utils';
 import { api, getApiBaseUrl } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useShiftStore } from '@/store/shiftStore';
+import { useCart } from '@/hooks/useCart';
+import { usePosData } from '@/hooks/usePosData';
+import { useAiModel } from '@/hooks/useAiModel';
+import { useAiScanner } from '@/hooks/useAiScanner';
+import { useCheckout } from '@/hooks/useCheckout';
 import { toast } from '@/components/ui/ToastProvider';
+import ProdukThumb from '@/components/ui/ProdukThumb';
+import CustomerSheet from '@/components/pos/CustomerSheet';
+import PaymentSheet from '@/components/pos/PaymentSheet';
+import QrisPendingPanel from '@/components/pos/QrisPendingPanel';
+import ReceiptModal from '@/components/pos/ReceiptModal';
 import QRCode from 'qrcode';
-
-/* ─────────── Reusable Product Thumbnail ─────────── */
-function ProdukThumb({ nama, img, className }) {
-  if (img) {
-    return (
-      <div className={cn('overflow-hidden rounded-xl border border-gray-200 shrink-0 bg-gray-100', className)}>
-        <img src={img} alt={nama} className="w-full h-full object-cover" />
-      </div>
-    );
-  }
-  const initials = (nama || 'P').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  return (
-    <div className={cn('bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center text-[#16A34A] font-bold text-xs select-none', className)}>
-      {initials}
-    </div>
-  );
-}
 
 /* ═══════════════════════════════════════════════════ */
 export default function KasirPosPage() {
   const [mounted, setMounted] = useState(false);
-  const [produkList, setProdukList] = useState([]);
-  const [pelangganList, setPelangganList] = useState([{ id: 'umum', nama: 'Pelanggan Umum', no_hp: '' }]);
   const [search, setSearch] = useState('');
+
+  // Data & fetch POS — source of truth dipindah ke hook usePosData
+  const {
+    produkList, setProdukList,
+    pelangganList, setPelangganList,
+    tokoPay, setTokoPay,
+    todayStats, setTodayStats,
+    kategoriList, setKategoriList,
+    selectedKategori, setSelectedKategori,
+    riwayat, setRiwayat,
+    riwayatTotal, riwayatPage, riwayatPages, isRiwayatLoading, riwayatFilter, riwayatPendingTotal,
+    setRiwayatPage, setRiwayatFilter,
+    produkPage, setProdukPage,
+    produkViews, setProdukViews,
+    viewMode, setViewMode,
+    sortBy, setSortBy,
+    fetchRiwayat, fetchPendingRiwayat, reloadRiwayatPage, switchRiwayatFilter,
+    fetchTokoPay, fetchTodayStats, fetchKategori, fetchProduk, fetchPelanggan,
+  } = usePosData();
 
   const [scanMode, setScanMode] = useState('ai'); // 'ai' | 'barcode'
 
-  // Cart
-  const [cart, setCart] = useState([]);
-  const [diskon, setDiskon] = useState(0);
+  // Cart — source of truth dipindah ke hook useCart
+  const {
+    cart,
+    diskon,
+    setDiskon,
+    addToCart,
+    updateQty,
+    clearCart,
+    resetCart,
+    subtotal,
+    total,
+    cartCount,
+  } = useCart();
   const [view, setView] = useState('home'); // 'home' | 'cart'
 
-  // Modals
-  const [showAiScan, setShowAiScan] = useState(false);
-  const [showBarcodeScan, setShowBarcodeScan] = useState(false);
-  const [showAiCandidates, setShowAiCandidates] = useState(false);
-  const [aiCandidates, setAiCandidates] = useState([]);
+  // Modals (scanner state dipindah ke hook useAiScanner)
   const [showCustomerSelect, setShowCustomerSelect] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState({ id: 'umum', nama: 'Pelanggan Umum', no_hp: '' });
   const [showPayment, setShowPayment] = useState(false);
-  const [showReceipt, setShowReceipt] = useState(false);
-  const [isPaying, setIsPaying] = useState(false);
-  const [payError, setPayError] = useState(null);
 
-  // Payment
-  const [metodeBayar, setMetodeBayar] = useState('cash');
-  const [tokoPay, setTokoPay] = useState(null); // pengaturan pembayaran dari /owner/toko
-  const [uangDiterima, setUangDiterima] = useState('');
-  const [completedTx, setCompletedTx] = useState(null);
-
-  // QRIS pending (dynamic QR + approval manual)
-  const [qrisPendingTx, setQrisPendingTx] = useState(null); // { id, qris_payload, total, ...receipt tx }
-  const [showQrisPending, setShowQrisPending] = useState(false);
-  const [showQrisCancelModal, setShowQrisCancelModal] = useState(false);
-  const [qrisCancelReason, setQrisCancelReason] = useState('');
-  const [qrisCancelError, setQrisCancelError] = useState('');
-  const [qrisActionLoading, setQrisActionLoading] = useState(false);
-  const [qrisImageSrc, setQrisImageSrc] = useState('');
-  const [qrisImageError, setQrisImageError] = useState('');
-  const [showQrisImageModal, setShowQrisImageModal] = useState(false);
-
-  // AI & Barcode scanning state
-  const [isDetecting, setIsDetecting] = useState(false);
-  const [detectedProduk, setDetectedProduk] = useState(null);
-  const [scannedBarcodeCode, setScannedBarcodeCode] = useState('');
-  const [barcodeDetectorSupported, setBarcodeDetectorSupported] = useState(null); // null=cek, true/false
-  const [barcodeNotFound, setBarcodeNotFound] = useState(false);
-  const [manualBarcode, setManualBarcode] = useState('');
-  const [cameraActive, setCameraActive] = useState(false);
-
-  // Video Ref for HTML5 Camera
-  const videoRef = useRef(null);
-
-  // TFJS Model & Mapping States
-  const [modelInfo, setModelInfo] = useState(null);
-  const [modelMapping, setModelMapping] = useState([]);
-  const [tfModel, setTfModel] = useState(null);
-  const [modelError, setModelError] = useState(null);
-  const [isModelLoading, setIsModelLoading] = useState(false);
-
-  // Active Shift State (DEEP-03) — source of truth di shiftStore (biar sinkron dgn guard global)
+  // === DEPENDENCIES hook lain (harus tersedia sebelum useCheckout/useAiScanner) ===
+  // Auth
+  const { user, toko } = useAuthStore();
+  // Shift (source of truth di shiftStore — sinkron dgn guard global)
   const shift = useShiftStore((s) => s.shift);
   const isShiftLoading = useShiftStore((s) => s.isShiftLoading);
   const fetchShiftStore = useShiftStore((s) => s.fetchShift);
   const openTutup = useShiftStore((s) => s.openTutup);
   const [modalAwal, setModalAwal] = useState('');
+  // Feedback toast — dipakai useCheckout & useAiScanner
+  const showFeedback = (type, title, message) => toast[type](message, { title });
+  // TFJS Model & Mapping — source of truth di hook useAiModel
+  const {
+    modelInfo, setModelInfo,
+    modelMapping, setModelMapping,
+    tfModel, setTfModel,
+    modelError, setModelError,
+    isModelLoading, setIsModelLoading,
+    classLabels, setClassLabels,
+    fetchActiveModel,
+  } = useAiModel();
 
-  // Statistik hari ini (real dari BE dashboard) + kategori POS
-  const [todayStats, setTodayStats] = useState({ omzet: 0, total_transaksi: 0, total_item_terjual: 0, total_produk_terjual: 0 });
-  const [kategoriList, setKategoriList] = useState([]);
-  const [selectedKategori, setSelectedKategori] = useState('semua');
+  // Checkout & payment — dipindah ke hook useCheckout
+  const {
+    isPaying, setIsPaying,
+    payError, setPayError,
+    metodeBayar, setMetodeBayar,
+    uangDiterima, setUangDiterima,
+    completedTx, setCompletedTx,
+    qrisPendingTx, setQrisPendingTx,
+    showQrisPending, setShowQrisPending,
+    showQrisCancelModal, setShowQrisCancelModal,
+    qrisCancelReason, setQrisCancelReason,
+    qrisCancelError, setQrisCancelError,
+    qrisActionLoading, setQrisActionLoading,
+    qrisImageSrc, setQrisImageSrc,
+    qrisImageError, setQrisImageError,
+    showQrisImageModal, setShowQrisImageModal,
+    showPay, setShowPay,
+    payStep, setPayStep,
+    showReceipt, setShowReceipt,
+    uangNum,
+    kembalian,
+    handleBayar,
+    handleNewTransaction,
+    handleApproveQris,
+    handleCancelQris,
+    shareStruk,
+    openPayment,
+  } = useCheckout({
+    cart, subtotal, diskon, total, cartCount,
+    selectedCustomer, setSelectedCustomer, pelangganList,
+    user, toko, shift,
+    fetchProduk, fetchTodayStats, fetchRiwayat,
+    resetCart, setDiskon,
+    setView,
+    showFeedback,
+  });
 
-  // History Transaksi (semua data, 10/halaman)
-  const [riwayat, setRiwayat] = useState([]);
-  const [riwayatTotal, setRiwayatTotal] = useState(0);
-  const [riwayatPage, setRiwayatPage] = useState(1);
-  const [riwayatPages, setRiwayatPages] = useState(1);
-  const [isRiwayatLoading, setIsRiwayatLoading] = useState(true);
-  const [riwayatFilter, setRiwayatFilter] = useState('semua'); // 'semua' | 'pending'
-  const [riwayatPendingTotal, setRiwayatPendingTotal] = useState(0);
-
-  // Katalog: pagination + tampilan grid/list + urutan
-  const [produkPage, setProdukPage] = useState(1);
-  const [produkViews, setProdukViews] = useState(12);
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
-  const [sortBy, setSortBy] = useState('nama'); // 'nama' | 'harga' | 'stok'
-
-  // Pembayaran: inline step (desktop) vs sheet (mobile)
-  const [showPay, setShowPay] = useState(false); // true = payment sheet/inline terbuka
-  const [payStep, setPayStep] = useState('cart'); // 'cart' | 'pay' — desktop hanya
+  // AI Scanner & barcode — dipindah ke hook useAiScanner
+  const {
+    showAiScan, setShowAiScan,
+    showBarcodeScan, setShowBarcodeScan,
+    showAiCandidates, setShowAiCandidates,
+    isDetecting, setIsDetecting,
+    detectedProduk, setDetectedProduk,
+    scannedBarcodeCode, setScannedBarcodeCode,
+    barcodeDetectorSupported, setBarcodeDetectorSupported,
+    barcodeNotFound, setBarcodeNotFound,
+    manualBarcode, setManualBarcode,
+    cameraActive, setCameraActive,
+    aiCandidates, setAiCandidates,
+    lastPredictionsMetadata, setLastPredictionsMetadata,
+    videoRef,
+    captureCameraFrame,
+    getProductByClassSlug,
+    handleDetectedBarcode,
+    handleManualBarcodeSubmit,
+    handleOpenAiScan,
+    handleCaptureSnapshot,
+    handleSelectCandidate,
+  } = useAiScanner({
+    produkList, tfModel, modelInfo, classLabels, modelMapping, addToCart,
+    fetchActiveModel, isModelLoading,
+  });
 
   const METODE_LABEL = { cash: 'Tunai', qris: 'QRIS' };
   const METODE_BADGE = {
@@ -160,58 +189,7 @@ export default function KasirPosPage() {
     qris: 'bg-[#F3EEFF] text-violet-600',
   };
 
-  const fetchRiwayat = async (page = riwayatPage) => {
-    try {
-      setIsRiwayatLoading(true);
-      const res = await api.get('/owner/laporan/riwayat', { params: { page, pageSize: 10 } });
-      const d = res?.data || res || {};
-
-      // Ambil jumlah pending utk badge (tanpa loading ganda)
-      api.get('/owner/laporan/pending', { params: { page: 1, pageSize: 1 } })
-        .then((pres) => { const pd = pres?.data || pres || {}; setRiwayatPendingTotal(pd?.total || 0); })
-        .catch(() => { /* ignore */ });
-
-      setRiwayat(Array.isArray(d.data) ? d.data : []);
-      setRiwayatTotal(d.total || 0);
-      setRiwayatPages(d.totalPages || 1);
-      setRiwayatPage(Math.min(Math.max(1, d.page || 1), d.totalPages || 1));
-      setRiwayatFilter('semua');
-    } catch {
-      setRiwayat([]);
-      setRiwayatTotal(0);
-    } finally {
-      setIsRiwayatLoading(false);
-    }
-  };
-
   useEffect(() => { fetchRiwayat(1); }, []);
-
-  // Fetch transaksi QRIS pending (untuk filter Pending di riwayat)
-  const fetchPendingRiwayat = async (page = 1) => {
-    try {
-      setIsRiwayatLoading(true);
-      const res = await api.get('/owner/laporan/pending', { params: { page, pageSize: 10 } });
-      const d = res?.data || res || {};
-      setRiwayat(Array.isArray(d.data) ? d.data : []);
-      setRiwayatTotal(d.total || 0);
-      setRiwayatPages(d.totalPages || 1);
-      setRiwayatPage(Math.min(Math.max(1, d.page || 1), d.totalPages || 1));
-    } catch {
-      setRiwayat([]);
-      setRiwayatTotal(0);
-    } finally {
-      setIsRiwayatLoading(false);
-    }
-  };
-
-  const reloadRiwayatPage = (page) => (riwayatFilter === 'pending' ? fetchPendingRiwayat(page) : fetchRiwayat(page));
-
-  const switchRiwayatFilter = (f) => {
-    setRiwayatFilter(f);
-    setRiwayatPage(1);
-    if (f === 'pending') fetchPendingRiwayat(1);
-    else fetchRiwayat(1);
-  };
 
   // Klik nomor transaksi di riwayat → buka struk (tanpa harus baru checkout)
   const openStrukRiwayat = (t) => {
@@ -263,21 +241,6 @@ export default function KasirPosPage() {
     return () => mq.removeEventListener('change', upd);
   }, []);
 
-  const openPayment = () => {
-    setPayError(null);
-    if (isDesktop) {
-      // Desktop: tukar isi panel ke step pembayaran (bukan perpanjang modal)
-      setPayStep('pay');
-      setUangDiterima(String(total));
-    } else {
-      setShowPay(true); // mobile: bottom sheet (renderPaymentSheet)
-    }
-  };
-
-  const showFeedback = (type, title, message) => toast[type](message, { title });
-
-  const { user, toko } = useAuthStore();
-
   useEffect(() => {
     setMounted(true);
     fetchProduk();
@@ -290,14 +253,6 @@ export default function KasirPosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchTokoPay = async () => {
-    try {
-      const res = await api.get('/owner/toko');
-      const d = res?.data || res;
-      if (d) setTokoPay(d);
-    } catch { setTokoPay(null); }
-  };
-
   // Metode tersedia: tunai/qris mengikuti toggle pengaturan
   const metodeTersedia = [
     ...(tokoPay?.tunai_aktif !== false ? [{ id: 'cash', label: 'Tunai', icon: Banknote }] : []),
@@ -309,638 +264,6 @@ export default function KasirPosPage() {
     if (tokoPay === null) return;
     if (!metodeTersedia.some(m => m.id === metodeBayar)) setMetodeBayar('cash');
   }, [tokoPay]);
-
-  const fetchTodayStats = async () => {
-    try {
-      const res = await api.get('/owner/dashboard', { params: { periode: 'hari_ini' } });
-      const d = res?.data || res;
-      if (d) setTodayStats({
-        omzet: d.omzet || 0,
-        total_transaksi: d.total_transaksi || 0,
-        total_item_terjual: d.total_item_terjual || 0,
-        total_produk_terjual: d.total_produk_terjual || 0,
-      });
-    } catch { /* biarkan 0 */ }
-  };
-
-  const fetchKategori = async () => {
-    try {
-      const res = await api.get('/kasir/kategori');
-      const data = res?.berhasil ? res.data : (Array.isArray(res?.data) ? res.data : []);
-      setKategoriList(Array.isArray(data) ? data : []);
-    } catch {
-      setKategoriList([]);
-    }
-  };
-
-  const fetchActiveModel = async () => {
-    setIsModelLoading(true);
-    setModelError(null);
-    try {
-      const res = await api.get('/kasir/ai/active-model');
-      if (res?.berhasil && res.data) {
-        const { model, mappings } = res.data;
-        setModelInfo(model);
-        setModelMapping(mappings);
-
-        const tf = await getTf();
-        await tf.ready();
-
-        // 1. Try loading from local IndexedDB cache for instant speed
-        const cacheKey = `indexeddb://tokiva-model-${model.id || model.versi || 'v1'}`;
-        let loadedModel = null;
-        try {
-          loadedModel = await tf.loadGraphModel(cacheKey + "-graph");
-          console.log('⚡ Model AI berhasil dimuat dari IndexedDB local cache!');
-        } catch {
-          // 2. Download from remote Supabase bucket
-          if (model.model_json_url) {
-            // Dev-local rewrite: production host blocked by CORS from localhost origin.
-            // Serve model from local backend when FE runs on localhost.
-            let modelUrl = model.model_json_url;
-            const apiOrigin = (() => {
-              try { return new URL(getApiBaseUrl()).origin; } catch { return null; }
-            })();
-            if (apiOrigin && typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-              modelUrl = modelUrl.replace(/^https?:\/\/[^/]+/, apiOrigin);
-            }
-            console.log('📥 Mengunduh model AI:', modelUrl);
-            loadedModel = await tf.loadGraphModel(modelUrl);
-            // Save to IndexedDB cache
-            try {
-              await loadedModel.save(cacheKey + '-graph');
-              console.log('💾 Model AI berhasil disimpan ke IndexedDB cache!');
-            } catch (saveErr) {
-              console.warn('Gagal menyimpan model ke IndexedDB cache:', saveErr);
-            }
-          }
-        }
-
-        if (loadedModel) {
-          setTfModel(loadedModel);
-        }
-
-        // Fetch class labels from class.json (derived from model_json_url path)
-        try {
-          let modelDir = model.model_json_url.replace(/\/model\.json$/, '');
-          const apiOrigin = (() => {
-            try { return new URL(getApiBaseUrl()).origin; } catch { return null; }
-          })();
-          if (apiOrigin && typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-            modelDir = modelDir.replace(/^https?:\/\/[^/]+/, apiOrigin);
-          }
-          const resp = await fetch(modelDir + '/class.json');
-          const classesJson = await resp.json();
-          const labels = Array.isArray(classesJson)
-            ? classesJson
-            : Object.keys(classesJson).sort((a,b) => Number(a)-Number(b)).map(k => classesJson[k]);
-          if (labels.length > 0) {
-            setClassLabels(labels);
-            console.log('📋 Class labels loaded:', labels.length);
-          }
-        } catch (e) {
-          console.warn('Gagal memuat class labels:', e);
-        }
-      } else {
-        setModelError(res?.pesan || 'Model AI aktif tidak ditemukan.');
-      }
-    } catch (err) {
-      console.warn('Gagal memuat model AI aktif:', err.message);
-      setModelError(err.message || 'Terjadi kesalahan saat mengunduh model AI.');
-    } finally {
-      setIsModelLoading(false);
-    }
-  };
-
-  const fetchProduk = async () => {
-    try {
-      const res = await api.get('/kasir/produk');
-      const data = Array.isArray(res) ? res : (res?.data || []);
-      if (data.length > 0) {
-        const normalized = data.map(p => ({
-          ...p,
-          harga: Number(p.harga_ecer ?? p.satuan_jual?.[0]?.harga_ecer ?? p.hpp ?? 0),
-        }));
-        setProdukList(normalized);
-      } else {
-        setProdukList([]);
-      }
-    } catch {
-      setProdukList([]);
-    }
-  };
-
-  const fetchPelanggan = async () => {
-    try {
-      const res = await api.get('/kasir/pelanggan');
-      const base = [{ id: 'umum', nama: 'Pelanggan Umum', no_hp: '' }];
-      if (res?.berhasil && Array.isArray(res.data)) {
-        setPelangganList([...base, ...res.data]);
-      } else {
-        setPelangganList(base);
-      }
-    } catch {
-      setPelangganList([{ id: 'umum', nama: 'Pelanggan Umum', no_hp: '' }]);
-    }
-  };
-
-  // Live Camera & Web BarcodeDetector / OCR Hook
-  useEffect(() => {
-    let stream = null;
-    let barcodeTimer = null;
-
-    if (showAiScan || showBarcodeScan) {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-        }).then(s => {
-          stream = s;
-          setCameraActive(true);
-          if (videoRef.current) {
-            videoRef.current.srcObject = s;
-          }
-        }).catch(err => {
-          console.warn('Camera access denied or unmounted:', err);
-          setCameraActive(false);
-        });
-      }
-
-      // Deteksi support BarcodeDetector sekali (Chrome desktop/Firefox: unsupported)
-      if (typeof window !== 'undefined') {
-        setBarcodeDetectorSupported('BarcodeDetector' in window);
-      }
-
-      // Barcode / OCR Detector Loop (hanya jalan kalau didukung)
-      if (showBarcodeScan && typeof window !== 'undefined' && 'BarcodeDetector' in window) {
-        barcodeTimer = setInterval(() => {
-          const detector = new window.BarcodeDetector({
-            formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code']
-          });
-          if (videoRef.current && videoRef.current.readyState === 4) {
-            detector.detect(videoRef.current).then(results => {
-              if (results.length > 0) {
-                const code = results[0].rawValue;
-                handleDetectedBarcode(code);
-              }
-            }).catch(() => {});
-          }
-        }, 400);
-      }
-    }
-
-    return () => {
-      if (barcodeTimer) clearInterval(barcodeTimer);
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-      setCameraActive(false);
-    };
-  }, [showAiScan, showBarcodeScan]);
-
-  const handleDetectedBarcode = (code) => {
-    if (!code) return;
-    setScannedBarcodeCode(code);
-    setBarcodeNotFound(false);
-    const found = produkList.find(p => p.barcode === code || p.id === code);
-    if (found) {
-      const added = addToCart(found);
-      if (!added) {
-                  toast.info(`${found.nama} sudah di keranjang. Tambah qty manual.`, { title: 'Sudah di Keranjang' });
-      }
-      setTimeout(() => {
-        setShowBarcodeScan(false);
-        setScannedBarcodeCode('');
-        setManualBarcode('');
-      }, 700);
-    } else {
-      setBarcodeNotFound(true);
-      setManualBarcode(code);
-    }
-  };
-
-  const handleManualBarcodeSubmit = async (e) => {
-    e?.preventDefault?.();
-    const code = (manualBarcode || '').trim();
-    if (!code) return;
-    handleDetectedBarcode(code);
-  };
-
-  // 🔊 Helper for POS Scanner Beep Sound (Web Audio API)
-  const playBeepSound = () => {
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1800, ctx.currentTime); // 1800Hz POS Scanner Beep Pitch
-
-      gain.gain.setValueAtTime(0.35, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.085);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.085);
-    } catch {
-      // Audio autoplay policy fallback
-    }
-  };
-
-  /* ── Cart helpers ── */
-  const addToCart = (produk) => {
-    if (!produk || !produk.id) return false;
-    // Blokir produk stok habis
-    const maxStok = Number(produk.stok ?? 0);
-    if (maxStok <= 0) {
-      toast.info(`${produk.nama} sedang habis. Silakan restok dulu.`, { title: 'Stok Habis' });
-      return false;
-    }
-    let added = false;
-    setCart((prevCart) => {
-      const idx = prevCart.findIndex(i => i.id === produk.id);
-      if (idx > -1) {
-        // Sudah ada — jangan auto qty++, kasir manual
-        added = false;
-        return prevCart;
-      }
-      added = true;
-      playBeepSound();
-      return [{ ...produk, qty: 1 }, ...prevCart]; // prepend = terbaru di atas
-    });
-    return added;
-  };
-
-  const updateQty = (id, delta) => {
-    setCart((prevCart) =>
-      prevCart
-        .map(i => {
-          if (i.id !== id) return i;
-          const maxStok = Number(i.stok ?? 0);
-          const nextQty = i.qty + delta;
-          // Tidak boleh melebihi stok tersedia
-          if (nextQty > maxStok) {
-            toast.warning(`${i.nama} hanya tersisa ${maxStok} pcs di stok.`, { title: 'Stok Tidak Mencukupi' });
-            return i;
-          }
-          return { ...i, qty: Math.max(0, nextQty) };
-        })
-        .filter(i => i.qty > 0)
-    );
-  };
-
-  const clearCart = () => setCart([]);
-
-  const subtotal = cart.reduce((s, i) => s + i.harga * i.qty, 0);
-  const total = Math.max(0, subtotal - diskon);
-  const uangNum = uangDiterima === '' ? total : (Number(uangDiterima) || 0);
-  const kembalian = Math.max(0, uangNum - total);
-  const cartCount = cart.reduce((s, i) => s + i.qty, 0);
-
-  const lastSnapshotRef = useRef(null);
-
-  const captureCameraFrame = () => {
-    if (!videoRef.current) return null;
-    try {
-      const video = videoRef.current;
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      return canvas.toDataURL('image/jpeg', 0.85);
-    } catch {
-      return null;
-    }
-  };
-
-  // TFJS Model Labels & Meta State
-  const [classLabels, setClassLabels] = useState([]);
-  const [lastPredictionsMetadata, setLastPredictionsMetadata] = useState(null);
-
-  // Real-time AI Continuous Inference Loop Refs
-  const isLoopRunningRef = useRef(false);
-  const isCooldownRef = useRef(false);
-
-  const getProductByClassSlug = (slug) => {
-    if (!slug) return null;
-    const s = slug.toLowerCase().replace(/-/g, ' ');
-    
-    // 1. Try barcode mapping
-    const mapping = modelMapping.find(m => m.class_slug?.toLowerCase() === slug?.toLowerCase());
-    if (mapping) {
-      const byBarcode = produkList.find(p => p.barcode === mapping.barcode);
-      if (byBarcode) return byBarcode;
-    }
-    
-    // 2. Fallback: match by product name (slug words)
-    const byName = produkList.find(p => {
-      const pname = (p.nama || '').toLowerCase();
-      const words = s.split(' ');
-      return words.some(w => w.length > 2 && pname.includes(w));
-    });
-    if (byName) return byName;
-    
-    // 3. Fallback: any product (so AI at least detects something)
-    return null;
-  };
-
-  // 🔄 REAL-TIME AI CONTINUOUS INFERENCE LOOP (Every 350ms)
-  useEffect(() => {
-    let aiLoopTimer = null;
-
-    if (showAiScan && cameraActive && tfModel) {
-      isCooldownRef.current = false;
-      isLoopRunningRef.current = false;
-
-      aiLoopTimer = setInterval(async () => {
-        if (!videoRef.current || videoRef.current.readyState < 2) return;
-        if (isLoopRunningRef.current || isCooldownRef.current) return;
-
-        try {
-          isLoopRunningRef.current = true;
-
-          const tf = await getTf();
-
-          // Capture current frame snapshot synchronously for retraining/evaluation payload
-          const snapshot = captureCameraFrame();
-          if (snapshot) lastSnapshotRef.current = snapshot;
-
-          // 1. Preprocess the video frame with tf.tidy for memory safety
-          const video = videoRef.current;
-          const tensor = tf.tidy(() => {
-            const raw = tf.browser.fromPixels(video);
-            const resized = tf.image.resizeBilinear(raw, [224, 224]);
-            return resized.toFloat().expandDims(0);
-          });
-
-          // 2. Run prediction
-          const output = tfModel.predict(tensor);
-          const probs = await output.data();
-          tensor.dispose();
-          output.dispose();
-
-          const threshold = Number(modelInfo?.confidence_threshold || 0.65);
-          const predictions = Array.from(probs)
-            .map((score, i) => ({
-              label: classLabels[i] || `Class ${i}`,
-              score: score
-            }))
-            .sort((a, b) => b.score - a.score);
-
-          if (predictions.length > 0) {
-            const topPrediction = predictions[0];
-
-            // Case A: High Confidence Match (>= Threshold) -> Auto Add & 1.2s Cooldown
-            if (topPrediction.score >= threshold) {
-              const matchedProduct = getProductByClassSlug(topPrediction.label);
-              if (matchedProduct) {
-                isCooldownRef.current = true;
-                setDetectedProduk({
-                  ...matchedProduct,
-                  confidence: Math.round(topPrediction.score * 100)
-                });
-                setAiCandidates([]); // Clear any previous candidates banner
-
-                const added = addToCart(matchedProduct);
-                if (!added) {
-                  toast.info(`${matchedProduct.nama} sudah di keranjang. Tambah qty manual.`, { title: 'Sudah di Keranjang' });
-                }
-
-                // NEW: Kirim koreksi positive (AI benar) untuk continuous learning
-                const snap = lastSnapshotRef.current;
-                if (snap) {
-                  api.post('/kasir/ai/koreksi', {
-                    foto_base64: snap,
-                    prediksi_1_produk_id: matchedProduct.id,
-                    prediksi_1_confidence: topPrediction.score,
-                    produk_dipilih_id: matchedProduct.id,
-                    is_correct: true,
-                  }).catch(() => {});
-                  toast.success('Koreksi tersimpan! Admin akan review untuk training AI.', { title: 'Koreksi Tersimpan' });
-                }
-
-                // Auto-resume scanning for the next item after 1.2 seconds (hands-free)
-                setTimeout(() => {
-                  setDetectedProduk(null);
-                  isCooldownRef.current = false;
-                }, 1200);
-              }
-            }
-            // Case B: Ambiguous / Low Confidence (0.25 <= score < Threshold) -> Auto Pause & Show Candidates Banner with Auto-Resume
-            else if (topPrediction.score >= 0.25) {
-              isCooldownRef.current = true; // Pause scanning loop briefly
-
-              const candidates = [];
-              const metadata = {
-                pred_1_prod_id: null, pred_1_conf: 0,
-                pred_2_prod_id: null, pred_2_conf: 0,
-                pred_3_prod_id: null, pred_3_conf: 0,
-              };
-
-              for (let i = 0; i < Math.min(3, predictions.length); i++) {
-                const pred = predictions[i];
-                const prod = getProductByClassSlug(pred.label);
-                if (prod) {
-                  candidates.push({
-                    ...prod,
-                    match: Math.round(pred.score * 100)
-                  });
-
-                  if (i === 0) {
-                    metadata.pred_1_prod_id = prod.id;
-                    metadata.pred_1_conf = Number(pred.score.toFixed(4));
-                  } else if (i === 1) {
-                    metadata.pred_2_prod_id = prod.id;
-                    metadata.pred_2_conf = Number(pred.score.toFixed(4));
-                  } else if (i === 2) {
-                    metadata.pred_3_prod_id = prod.id;
-                    metadata.pred_3_conf = Number(pred.score.toFixed(4));
-                  }
-                }
-              }
-
-              if (candidates.length > 0) {
-                setLastPredictionsMetadata(metadata);
-                setAiCandidates(candidates);
-
-                // Auto-resume scanning after 1.5s if cashier brings a new product or moves item
-                setTimeout(() => {
-                  isCooldownRef.current = false;
-                }, 1500);
-              } else {
-                isCooldownRef.current = false;
-              }
-            }
-          }
-        } catch (err) {
-          console.warn('Real-time AI loop error:', err);
-        } finally {
-          isLoopRunningRef.current = false;
-        }
-      }, 350);
-    }
-
-    return () => {
-      if (aiLoopTimer) clearInterval(aiLoopTimer);
-    };
-  }, [showAiScan, cameraActive, tfModel, classLabels, modelMapping, produkList]);
-
-  /* ── AI Scan flow ── */
-  const handleOpenAiScan = () => {
-    setShowAiScan(true);
-    setDetectedProduk(null);
-    setIsDetecting(false);
-    if (!tfModel && !isModelLoading) {
-      fetchActiveModel();
-    }
-  };
-
-  const handleCaptureSnapshot = async () => {
-    if (!videoRef.current) return;
-    isCooldownRef.current = false;
-    setAiCandidates([]);
-    setDetectedProduk(null);
-    setIsDetecting(true);
-
-    const snapshot = captureCameraFrame();
-    if (snapshot) lastSnapshotRef.current = snapshot;
-
-    // Fallback if model is not loaded yet
-    if (!tfModel) {
-      setTimeout(() => {
-        setIsDetecting(false);
-        showFeedback('info', 'Model Belum Siap', 'Model AI sedang memuat atau tidak aktif. Silakan gunakan Scan Barcode atau Cari Manual.');
-      }, 500);
-      return;
-    }
-
-    try {
-      const tf = await getTf();
-      const video = videoRef.current;
-      
-      // 1. Preprocess the video frame
-      const tensor = tf.tidy(() => {
-        const raw = tf.browser.fromPixels(video);
-        const resized = tf.image.resizeBilinear(raw, [224, 224]);
-        return resized.toFloat().expandDims(0);
-      });
-
-      // 2. Run prediction
-      const output = tfModel.predict(tensor);
-      const probs = await output.data();
-      tensor.dispose();
-      output.dispose();
-
-      setIsDetecting(false);
-
-      // 3. Match prediction probabilities to class labels
-      const threshold = Number(modelInfo?.confidence_threshold || 0.65);
-      const predictions = Array.from(probs)
-        .map((score, i) => ({
-          label: classLabels[i] || `Class ${i}`,
-          score: score
-        }))
-        .sort((a, b) => b.score - a.score);
-
-      if (predictions.length === 0) {
-        showFeedback('info', 'Tidak Terdeteksi', 'Gagal mendeteksi objek. Silakan gunakan Scan Barcode atau Cari Manual.');
-        return;
-      }
-
-      const topPrediction = predictions[0];
-
-      // 4. Check if confidence >= threshold and product exists
-      if (topPrediction.score >= threshold) {
-        const matchedProduct = getProductByClassSlug(topPrediction.label);
-        if (matchedProduct) {
-          isCooldownRef.current = true;
-          setDetectedProduk({
-            ...matchedProduct,
-            confidence: Math.round(topPrediction.score * 100)
-          });
-          addToCart(matchedProduct);
-          setTimeout(() => {
-            setDetectedProduk(null);
-            isCooldownRef.current = false;
-          }, 1500);
-          return;
-        }
-      }
-
-      // 5. Fallback: Map top 3 predictions to POS products for candidates list
-      const candidates = [];
-      const metadata = {
-        pred_1_prod_id: null, pred_1_conf: 0,
-        pred_2_prod_id: null, pred_2_conf: 0,
-        pred_3_prod_id: null, pred_3_conf: 0,
-      };
-
-      for (let i = 0; i < Math.min(3, predictions.length); i++) {
-        const pred = predictions[i];
-        const prod = getProductByClassSlug(pred.label);
-        if (prod) {
-          candidates.push({
-            ...prod,
-            match: Math.round(pred.score * 100)
-          });
-          
-          if (i === 0) {
-            metadata.pred_1_prod_id = prod.id;
-            metadata.pred_1_conf = Number(pred.score.toFixed(4));
-          } else if (i === 1) {
-            metadata.pred_2_prod_id = prod.id;
-            metadata.pred_2_conf = Number(pred.score.toFixed(4));
-          } else if (i === 2) {
-            metadata.pred_3_prod_id = prod.id;
-            metadata.pred_3_conf = Number(pred.score.toFixed(4));
-          }
-        }
-      }
-
-      setLastPredictionsMetadata(metadata);
-
-      if (candidates.length > 0) {
-        setAiCandidates(candidates);
-        isCooldownRef.current = true; // Lock scan so prediction candidates stay fixed without flickering!
-      } else {
-        showFeedback('info', 'Produk Tidak Dikenali', 'Produk tidak dikenali dalam sistem. Silakan scan barcode atau cari manual.');
-      }
-    } catch (err) {
-      console.error('Inference error:', err);
-      setIsDetecting(false);
-      showFeedback('error', 'Kesalahan Proses', 'Terjadi kesalahan saat memproses gambar.');
-    }
-  };
-
-  const handleSelectCandidate = (produk) => {
-    const added = addToCart(produk);
-    if (!added) {
-                  toast.info(`${produk.nama} sudah di keranjang. Tambah qty manual.`, { title: 'Sudah di Keranjang' });
-    }
-    setAiCandidates([]);
-    isCooldownRef.current = false;
-    
-    // Save base64 snapshot to evaluation retraining log
-    const snap = lastSnapshotRef.current;
-    if (snap && lastPredictionsMetadata) {
-      api.post('/kasir/ai/koreksi', {
-        foto_base64: snap,
-        prediksi_1_produk_id: lastPredictionsMetadata.pred_1_prod_id,
-        prediksi_1_confidence: lastPredictionsMetadata.pred_1_conf,
-        prediksi_2_produk_id: lastPredictionsMetadata.pred_2_prod_id,
-        prediksi_2_confidence: lastPredictionsMetadata.pred_2_conf,
-        prediksi_3_produk_id: lastPredictionsMetadata.pred_3_prod_id,
-        prediksi_3_confidence: lastPredictionsMetadata.pred_3_conf,
-        produk_dipilih_id: produk.id,
-        is_correct: false,
-      }).catch((e) => console.warn('Gagal menyimpan evaluasi koreksi:', e));
-                  toast.success('Koreksi tersimpan! Admin akan review untuk training AI.', { title: 'Koreksi Tersimpan' });
-    }
-  };
 
   // Sembunyikan bottom nav saat struk / panel QRIS tampil (full-screen)
   useEffect(() => {
@@ -977,153 +300,6 @@ export default function KasirPosPage() {
     return () => { active = false; };
   }, [qrisPendingTx?.qris_payload]);
 
-  /* ── Checkout ── */
-  const handleBayar = async () => {
-    if (isPaying || (metodeBayar === 'cash' && uangNum < total)) return;
-    setIsPaying(true);
-
-    try {
-      const payload = {
-        shift_id: shift?.id || undefined,
-        subtotal: subtotal,
-        total: total,
-        pelanggan_id: selectedCustomer?.id !== 'umum' ? selectedCustomer?.id : null,
-        metode_bayar: metodeBayar,
-        nominal_bayar: metodeBayar === 'cash' ? uangNum : total,
-        diskon_total: diskon,
-        items: cart.map(item => ({
-          produk_id: item.id,
-          produk_satuan_jual_id: item.satuan_jual?.[0]?.id || null,
-          nama_produk: item.nama,
-          satuan: item.satuan_dasar?.nama || 'Pcs',
-          konversi: item.satuan_jual?.[0]?.konversi || 1,
-          qty: item.qty,
-          harga_satuan: item.harga,
-          diskon: 0,
-          subtotal: item.harga * item.qty,
-        })),
-      };
-
-      const res = await api.post('/kasir/transaksi', payload);
-      const data = res?.data || {};
-
-      const tx = {
-        id: data.id,
-        nomor_transaksi: data.nomor_transaksi || `#TRK-${Date.now().toString().slice(-6)}`,
-        tanggal: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
-        waktu: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
-        total,
-        uang_diterima: metodeBayar === 'cash' ? uangNum : total,
-        kembalian: metodeBayar === 'cash' ? kembalian : 0,
-        items: cart.map(item => ({ ...item })),
-        kasir: user?.nama || 'Kasir',
-        toko: toko?.nama || 'Toko',
-        toko_alamat: toko?.alamat || '',
-        pelanggan: selectedCustomer?.nama || 'Pelanggan Umum',
-        metode_bayar: metodeBayar,
-        status_qris: data.status_qris || null,
-      };
-
-      // QRIS → backend bikin transaksi pending (dynamic QR). Tampilkan panel QR dulu, jangan struk.
-      if (metodeBayar === 'qris' && (data.status === 'pending' || data.status_qris === 'pending')) {
-        setQrisPendingTx({ ...tx, qris_payload: data.qris_payload || '' });
-        setShowPay(false);
-        setPayStep('cart');
-        setPayError(null);
-        setUangDiterima('');
-        setShowQrisPending(true);
-        fetchProduk();
-        fetchTodayStats();
-        fetchRiwayat(1);
-        return;
-      }
-
-      setCompletedTx(tx);
-      setShowPay(false);
-      setPayStep('cart');
-      setShowReceipt(true);
-      setPayError(null);
-      setUangDiterima('');
-      fetchProduk();
-      fetchTodayStats();
-      fetchRiwayat(1); // refresh history transaksi terbaru di POS
-    } catch (err) {
-      setPayError(err.response?.data?.pesan || err.message || 'Terjadi kesalahan saat memproses pembayaran.');
-      showFeedback('error', 'Gagal Transaksi', err.response?.data?.pesan || err.message);
-    } finally {
-      setIsPaying(false);
-    }
-  };
-
-  const handleNewTransaction = () => {
-    setCart([]);
-    setDiskon(0);
-    setUangDiterima('');
-    setMetodeBayar('cash');
-    setSelectedCustomer(pelangganList[0] || { id: 'umum', nama: 'Pelanggan Umum', no_hp: '' });
-    setShowReceipt(false);
-    setShowPay(false);
-    setPayStep('cart');
-    setShowQrisPending(false);
-    setQrisPendingTx(null);
-    setShowQrisCancelModal(false);
-    setQrisCancelReason('');
-    setQrisCancelError('');
-    setView('home');
-  };
-
-  // QRIS pending: setujui bayar → tampilkan struk (+ refresh riwayat)
-  const handleApproveQris = async () => {
-    if (!qrisPendingTx?.id || qrisActionLoading) return;
-    setQrisActionLoading(true);
-    try {
-      await api.post(`/kasir/transaksi/${qrisPendingTx.id}/qris/approve`, { alasan: 'dibayar' });
-      setCompletedTx(qrisPendingTx);
-      setShowQrisPending(false);
-      setQrisPendingTx(null);
-      setCart([]);
-      setDiskon(0);
-      setShowReceipt(true);
-      fetchProduk();
-      fetchTodayStats();
-      fetchRiwayat(1);
-      showFeedback('success', 'Pembayaran Dikonfirmasi', 'Transaksi QRIS telah disetujui.');
-    } catch (err) {
-      showFeedback('error', 'Gagal Menyetujui', err.response?.data?.pesan || err.message || 'Terjadi kesalahan.');
-    } finally {
-      setQrisActionLoading(false);
-    }
-  };
-
-  // QRIS pending: batalkan transaksi (alasan wajib)
-  const handleCancelQris = async () => {
-    const alasan = (qrisCancelReason || '').trim();
-    if (!alasan) {
-      setQrisCancelError('Alasan pembatalan wajib diisi.');
-      return;
-    }
-    if (!qrisPendingTx?.id || qrisActionLoading) return;
-    setQrisActionLoading(true);
-    try {
-      await api.post(`/kasir/transaksi/${qrisPendingTx.id}/qris/cancel`, { alasan });
-      setShowQrisCancelModal(false);
-      setShowQrisPending(false);
-      setQrisPendingTx(null);
-      setQrisCancelReason('');
-      setQrisCancelError('');
-      setCart([]);
-      setDiskon(0);
-      setUangDiterima('');
-      fetchProduk();
-      fetchTodayStats();
-      fetchRiwayat(1);
-      showFeedback('info', 'Transaksi Dibatalkan', 'Transaksi QRIS telah dibatalkan.');
-    } catch (err) {
-      setQrisCancelError(err.response?.data?.pesan || err.message || 'Terjadi kesalahan.');
-    } finally {
-      setQrisActionLoading(false);
-    }
-  };
 
   const filteredProdukSemua = produkList.filter(p => {
     const matchSearch = !search || p.nama.toLowerCase().includes(search.toLowerCase()) || p.barcode?.includes(search);
@@ -2128,497 +1304,61 @@ export default function KasirPosPage() {
         </>
       )}
 
-      {renderCustomerSheet()}
-      {renderPaymentSheet()}
-      {renderQrisPending()}
-      {renderReceiptModal()}
+      <CustomerSheet
+        open={showCustomerSelect}
+        pelangganList={pelangganList}
+        selectedCustomer={selectedCustomer}
+        onSelect={(c) => { setSelectedCustomer(c); setShowCustomerSelect(false); }}
+        onClose={() => setShowCustomerSelect(false)}
+      />
+      <PaymentSheet
+        open={showPay}
+        isDesktop={isDesktop}
+        subtotal={subtotal}
+        diskon={diskon}
+        total={total}
+        metodeTersedia={metodeTersedia}
+        metodeBayar={metodeBayar}
+        onSetMetode={setMetodeBayar}
+        uangDiterima={uangDiterima}
+        onSetUang={setUangDiterima}
+        uangNum={uangNum}
+        kembalian={kembalian}
+        payError={payError}
+        isPaying={isPaying}
+        onBayar={() => { setPayError(null); handleBayar(); }}
+        onClose={() => setShowPay(false)}
+      />
+      <QrisPendingPanel
+        open={showQrisPending}
+        tx={qrisPendingTx}
+        merchantNama={tokoPay?.qris_info?.merchant_name || toko?.nama || 'Tokiva'}
+        qrSrc={qrisImageSrc}
+        qrisImageError={qrisImageError}
+        showQrisImageModal={showQrisImageModal}
+        onOpenQrisImage={() => setShowQrisImageModal(true)}
+        onCloseQrisImage={() => setShowQrisImageModal(false)}
+        showQrisCancelModal={showQrisCancelModal}
+        qrisActionLoading={qrisActionLoading}
+        qrisCancelReason={qrisCancelReason}
+        onSetQrisCancelReason={(v) => { setQrisCancelReason(v); setQrisCancelError(''); }}
+        qrisCancelError={qrisCancelError}
+        onOpenCancelModal={() => { setQrisCancelError(''); setQrisCancelReason(''); setShowQrisCancelModal(true); }}
+        onCloseCancelModal={() => setShowQrisCancelModal(false)}
+        onApprove={handleApproveQris}
+        onCancel={handleCancelQris}
+        onBackHome={handleNewTransaction}
+      />
+      <ReceiptModal
+        open={showReceipt}
+        tx={completedTx}
+        subtotal={subtotal}
+        diskon={diskon}
+        metodeLabel={{ cash: 'Tunai', qris: 'QRIS' }[completedTx?.metode_bayar] || 'Tunai'}
+        onShare={shareStruk}
+        onNewTransaction={handleNewTransaction}
+      />
 
     </div>
   );
-
-  function renderCustomerSheet() {
-    if (!showCustomerSelect) return null;
-    return (
-      <>
-        <div onClick={() => setShowCustomerSelect(false)} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fade-in" />
-        <div className="fixed left-0 right-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl border-t border-gray-100 p-5 pb-24 animate-slide-up max-h-[85vh] overflow-y-auto">
-          <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3" />
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-bold text-gray-900">Pilih Pelanggan</h2>
-            <button onClick={() => setShowCustomerSelect(false)} className="p-1"><X className="w-5 h-5 text-gray-500" /></button>
-          </div>
-
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-            <input placeholder="Cari pelanggan" className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#16A34A]" />
-          </div>
-
-          <div className="space-y-1.5">
-            {pelangganList.map((c, idx) => (
-              <button
-                key={c.id || `cust-${idx}`}
-                onClick={() => { setSelectedCustomer(c); setShowCustomerSelect(false); }}
-                className={cn(
-                  'w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left',
-                  selectedCustomer?.id === c.id ? 'bg-[#ECFDF5] border border-[#16A34A]/20' : 'hover:bg-gray-50'
-                )}
-              >
-                <div className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center shrink-0">
-                  <User className="w-4 h-4 text-gray-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{c.nama}</p>
-                  {c.no_hp && <p className="text-[11px] text-gray-500">{c.no_hp}</p>}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <button className="w-full mt-4 flex items-center justify-between py-3 px-4 bg-white border-2 border-dashed border-gray-200 rounded-2xl text-sm font-semibold text-gray-500 hover:border-[#16A34A] hover:text-[#16A34A] transition-colors">
-            <div className="flex items-center gap-2">
-              <UserPlus className="w-4 h-4" />
-              <span>Pelanggan Baru</span>
-            </div>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-      </>
-    );
-  }
-
-  /* ════════════════════════════════════════════════════
-     SCREEN 6: PEMBAYARAN (Bottom Sheet)
-     ════════════════════════════════════════════════════ */
-  function renderPaymentSheet() {
-    if (!showPay || isDesktop) return null;
-    return (
-      <>
-        <div onClick={() => setShowPay(false)} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fade-in" />
-        <div className="fixed left-0 right-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl border-t border-gray-100 p-5 pb-28 animate-slide-up max-h-[90vh] overflow-y-auto">
-          <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3" />
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-semibold text-[#10233E]">Pembayaran</h2>
-            <button onClick={() => setShowPay(false)} className="p-1"><X className="w-5 h-5 text-[#68758A]" /></button>
-          </div>
-
-          {/* Ringkasan Belanja */}
-          <div className="bg-[#FAFBFC] border border-gray-50 rounded-[18px] p-4 space-y-2 mb-4">
-            <div className="flex justify-between text-xs">
-              <span className="font-normal text-[#68758A]">Subtotal</span>
-              <span className="font-medium text-[#10233E]">{formatRupiah(subtotal)}</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="font-normal text-[#68758A]">Diskon</span>
-              <span className="font-medium text-[#EF4444]">- {formatRupiah(diskon)}</span>
-            </div>
-            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-              <span className="text-xs font-medium text-[#10233E]">Total</span>
-              <span className="text-lg font-semibold text-[#0CAF60]">{formatRupiah(total)}</span>
-            </div>
-          </div>
-
-          {/* Metode Pembayaran */}
-          <div className="mb-4">
-            <p className="text-[11px] font-medium text-[#68758A] mb-1.5">Metode Pembayaran</p>
-            <div className={cn('grid gap-2', metodeTersedia.length === 1 ? 'grid-cols-1' : metodeTersedia.length === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
-              {metodeTersedia.map(m => {
-                const Icon = m.icon;
-                const active = metodeBayar === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => setMetodeBayar(m.id)}
-                    className={cn(
-                      'flex items-center gap-2 py-2.5 px-3 rounded-xl text-xs font-medium border transition-all justify-center',
-                      active ? 'bg-[#0CAF60] text-white border-[#0CAF60] shadow-sm' : 'bg-white text-[#68758A] border-gray-100 hover:bg-[#E8FAF0]'
-                    )}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {m.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Uang Diterima & Quick Chips (Tunai only) */}
-          {metodeBayar === 'cash' && (
-            <div className="space-y-3 mb-4">
-              <div>
-                <label className="text-[11px] font-medium text-[#68758A] mb-1 block">Uang Diterima</label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-[#0CAF60]">Rp</span>
-                  <input
-                    type="number"
-                    value={uangDiterima}
-                    onChange={e => setUangDiterima(e.target.value)}
-                    placeholder={String(total)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-100 rounded-xl text-lg font-medium text-[#0CAF60] outline-none focus:border-[#0CAF60]"
-                  />
-                </div>
-              </div>
-
-              {/* Quick Nominal Chips */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => setUangDiterima(String(total))}
-                  className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-[#E8FAF0] text-[#087A4B] hover:bg-emerald-100 transition-colors"
-                >
-                  Uang Pas
-                </button>
-                {[10000, 20000, 50000, 100000].map((nominal) => (
-                  <button
-                    key={nominal}
-                    type="button"
-                    onClick={() => setUangDiterima(String(nominal))}
-                    className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-gray-50 text-[#68758A] hover:bg-gray-100 transition-colors"
-                  >
-                    {nominal >= 1000 ? `${nominal / 1000}rb` : nominal}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex justify-between items-center pt-1 border-t border-gray-100">
-                <span className="text-xs font-normal text-[#68758A]">Kembalian</span>
-                <span className="text-lg font-semibold text-[#0CAF60]">{formatRupiah(kembalian)}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Error Banner Gagal Bayar */}
-          {payError && (
-            <div className="mb-4 p-3 rounded-xl bg-[#FFF0F0] border border-[#F5C6C9] flex items-start gap-2 animate-fade-in">
-              <XCircle className="w-4 h-4 text-[#D94850] shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-medium text-[#D94850]">Pembayaran Gagal</p>
-                <p className="text-[10px] font-normal text-[#68758A] mt-0.5">{payError}</p>
-              </div>
-            </div>
-          )}
-
-          {/* CTA Bayar */}
-          <button
-            onClick={() => { setPayError(null); handleBayar(); }}
-            disabled={isPaying || (metodeBayar === 'cash' && uangNum < total)}
-            className="w-full flex items-center justify-center gap-2 bg-[#0CAF60] hover:bg-[#087A4B] text-white font-medium py-3.5 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-50 shadow-sm"
-          >
-            {isPaying ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {isPaying ? 'Memproses Pembayaran...' : payError ? 'Coba Lagi' : 'Bayar Sekarang'}
-            {!isPaying && <ArrowRight className="w-4 h-4" />}
-          </button>
-        </div>
-      </>
-    );
-  }
-
-  /* ════════════════════════════════════════════════════
-     SCREEN 6B: QRIS PENDING (Approval Manual, Full Modal)
-     ════════════════════════════════════════════════════ */
-  function renderQrisPending() {
-    if (!showQrisPending || !qrisPendingTx) return null;
-    const qt = qrisPendingTx;
-    const merchantNama = tokoPay?.qris_info?.merchant_name || toko?.nama || 'Tokiva';
-    const qrSrc = qrisImageSrc;
-    return (
-      <>
-        <div className="hidden lg:block fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fade-in" />
-        <div className="fixed inset-0 z-50 bg-[#F8FAF9] flex flex-col items-center justify-center overflow-y-auto animate-fade-in lg:bg-transparent">
-          <div className="w-full max-w-[430px] mx-auto px-4 py-6 lg:max-w-md lg:bg-white lg:rounded-2xl lg:shadow-2xl lg:p-5 lg:max-h-[92vh] lg:overflow-y-auto">
-            <div className="text-center mb-4">
-              <div className="w-16 h-16 bg-[#FFF8D9] rounded-full flex items-center justify-center mx-auto">
-                <QrCode className="w-8 h-8 text-amber-500" />
-              </div>
-              <h2 className="text-[17px] font-semibold text-[#10233E] mt-2">Menunggu Pembayaran QRIS</h2>
-              <p className="text-[11px] font-normal text-[#68758A] mt-0.5">Pindai QR dengan aplikasi QRIS pelanggan, lalu konfirmasi di sini.</p>
-            </div>
-
-            <div className="bg-white rounded-[16px] shadow-sm border border-gray-100 p-4">
-              {/* QR */}
-              <div className="flex justify-center mb-3">
-                {qrSrc ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowQrisImageModal(true)}
-                    className="group rounded-2xl bg-white p-2 border border-gray-100 shadow-sm hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-[#0CAF60]/40"
-                    aria-label="Buka QR pembayaran"
-                    title="Klik untuk memperbesar QR pembayaran"
-                  >
-                    <img
-                      src={qrSrc}
-                      alt="QR pembayaran QRIS"
-                      className="w-56 h-56 rounded-xl bg-white object-contain"
-                    />
-                    <span className="block text-[9px] text-[#68758A] mt-1 group-hover:text-[#0CAF60]">Klik QR untuk memperbesar</span>
-                  </button>
-                ) : qrisImageError ? (
-                  <div className="w-56 min-h-56 rounded-xl bg-[#FFF0F0] border border-[#F5C6C9] flex items-center justify-center text-center p-4 text-[10px] text-[#D94850]">
-                    {qrisImageError}
-                  </div>
-                ) : (
-                  <div className="w-56 h-56 rounded-xl bg-gray-50 border border-dashed border-gray-200 flex items-center justify-center text-[10px] text-[#68758A]">
-                    Menyiapkan QR pembayaran...
-                  </div>
-                )}
-              </div>
-
-              {/* Merchant + total */}
-              <div className="text-center space-y-1">
-                <p className="text-xs font-semibold text-[#10233E]">{merchantNama}</p>
-                <p className="text-[10px] font-normal text-[#68758A]">{qt.nomor_transaksi}</p>
-              </div>
-              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
-                <span className="text-[10px] font-normal text-[#68758A]">Total Bayar</span>
-                <span className="text-xl font-semibold text-[#0CAF60]">{formatRupiah(qt.total)}</span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="space-y-2 mt-4">
-              <button
-                onClick={handleApproveQris}
-                disabled={qrisActionLoading}
-                className="w-full flex items-center justify-center gap-2 bg-[#0CAF60] hover:bg-[#087A4B] text-white font-medium py-3.5 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-50 shadow-sm"
-              >
-                {qrisActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                {qrisActionLoading ? 'Memproses...' : 'Approve Pembayaran'}
-              </button>
-              <button
-                onClick={() => { setQrisCancelError(''); setQrisCancelReason(''); setShowQrisCancelModal(true); }}
-                disabled={qrisActionLoading}
-                className="w-full flex items-center justify-center gap-2 bg-[#FFF0F0] border border-[#F5C6C9] text-[#D94850] font-medium py-3 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-50"
-              >
-                <XCircle className="w-4 h-4" />
-                Batalkan Transaksi
-              </button>
-              <button
-                onClick={handleNewTransaction}
-                className="w-full text-[11px] font-normal text-[#68758A] hover:text-[#10233E] transition-colors py-1"
-              >
-                Kembali ke Home (abaikan QR)
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Modal QR besar — hanya QR + tombol tutup */}
-        {showQrisImageModal && qrSrc && (
-          <div
-            className="fixed inset-0 z-[80] bg-black/75 backdrop-blur-sm flex items-center justify-center p-5 animate-fade-in"
-            onClick={() => setShowQrisImageModal(false)}
-            role="dialog"
-            aria-modal="true"
-            aria-label="QR pembayaran"
-          >
-            <div
-              className="relative bg-white rounded-2xl p-4 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                type="button"
-                onClick={() => setShowQrisImageModal(false)}
-                className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white shadow-lg flex items-center justify-center text-[#10233E] hover:bg-gray-100"
-                aria-label="Tutup QR pembayaran"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              <img
-                src={qrSrc}
-                alt="QR pembayaran QRIS ukuran besar"
-                className="w-[min(80vw,360px)] h-[min(80vw,360px)] object-contain rounded-xl"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Modal alasan batal (alasan wajib) */}
-        {showQrisCancelModal && (
-          <>
-            <div onClick={() => !qrisActionLoading && setShowQrisCancelModal(false)} className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm animate-fade-in" />
-            <div className="fixed left-0 right-0 top-1/2 -translate-y-1/2 z-[70] mx-auto max-w-sm bg-white rounded-2xl shadow-2xl p-5 animate-fade-in">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-[#10233E]">Alasan Pembatalan</h3>
-                <button onClick={() => !qrisActionLoading && setShowQrisCancelModal(false)} className="p-1"><X className="w-4 h-4 text-[#68758A]" /></button>
-              </div>
-              <p className="text-[10px] font-normal text-[#68758A] mb-2">Alasan wajib diisi sebelum transaksi QRIS dibatalkan.</p>
-              <textarea
-                value={qrisCancelReason}
-                onChange={(e) => { setQrisCancelReason(e.target.value); setQrisCancelError(''); }}
-                placeholder="Contoh: pelanggan membatalkan pembayaran..."
-                rows={3}
-                className="w-full px-3 py-2.5 bg-[#FAFBFC] border border-gray-100 rounded-xl text-xs text-[#10233E] outline-none focus:border-[#D94850] resize-none"
-              />
-              {qrisCancelError && (
-                <p className="text-[10px] font-normal text-[#D94850] mt-1.5">{qrisCancelError}</p>
-              )}
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={() => setShowQrisCancelModal(false)}
-                  disabled={qrisActionLoading}
-                  className="flex-1 py-2.5 rounded-xl text-xs font-medium text-[#68758A] bg-white border border-gray-100 hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  Tutup
-                </button>
-                <button
-                  onClick={handleCancelQris}
-                  disabled={qrisActionLoading}
-                  className="flex-1 py-2.5 rounded-xl text-xs font-medium text-white bg-[#D94850] hover:bg-[#c13f46] transition-colors disabled:opacity-50"
-                >
-                  {qrisActionLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Ya, Batalkan'}
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </>
-    );
-  }
-
-  /* ════════════════════════════════════════════════════
-     SCREEN 7: STRUK BERHASIL (Full Modal)
-     ════════════════════════════════════════════════════ */
-  function renderReceiptModal() {
-    if (!showReceipt || !completedTx) return null;
-    const tx = completedTx;
-    const metodeLabel = { cash: 'Tunai', qris: 'QRIS' }[tx.metode_bayar] || 'Tunai';
-
-    const shareStruk = async () => {
-      const lines = [
-        tx.toko,
-        tx.toko_alamat,
-        '--------------------------------',
-        `No.     : ${tx.nomor_transaksi}`,
-        `Tanggal : ${tx.tanggal}`,
-        `Waktu   : ${tx.waktu}`,
-        `Kasir   : ${tx.kasir}`,
-        `Pelanggan: ${tx.pelanggan}`,
-        `Metode  : ${metodeLabel}`,
-        '--------------------------------',
-        ...(tx.items || []).map(i => `${i.nama}\n  ${i.qty} x ${formatRupiah(i.harga)} = ${formatRupiah(i.harga * i.qty)}`),
-        '--------------------------------',
-        `Subtotal : ${formatRupiah(subtotal)}`,
-        `Diskon   : -${formatRupiah(diskon)}`,
-        `TOTAL    : ${formatRupiah(tx.total)}`,
-        `${metodeLabel}  : ${formatRupiah(tx.uang_diterima)}`,
-        `Kembalian: ${formatRupiah(tx.kembalian)}`,
-        '--------------------------------',
-        'Terima kasih telah berbelanja!',
-      ];
-      const text = lines.join('\n');
-      if (navigator.share) {
-        try { await navigator.share({ title: 'Struk ' + tx.nomor_transaksi, text }); return; } catch { /* batal share */ }
-      }
-      try {
-        await navigator.clipboard.writeText(text);
-        showFeedback('success', 'Struk Disalin', 'Teks struk telah disalin ke clipboard.');
-      } catch {
-        showFeedback('info', 'Struk', text.slice(0, 200));
-      }
-    };
-
-    return (
-      <>
-      {/* Backdrop (desktop) — mobile full overlay tanpa backdrop terpisah */}
-      <div onClick={handleNewTransaction} className="hidden lg:block fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fade-in" />
-      <div className="fixed inset-0 z-50 bg-[#F8FAF9] flex flex-col overflow-y-auto animate-fade-in lg:bg-transparent lg:items-center lg:justify-center lg:overflow-hidden">
-        <div className="w-full max-w-[430px] mx-auto px-4 py-6 pb-10 lg:max-w-md lg:bg-white lg:rounded-2xl lg:shadow-2xl lg:p-5 lg:max-h-[92vh] lg:overflow-y-auto lg:relative">
-          {/* Close × (desktop only) */}
-          <button
-            onClick={handleNewTransaction}
-            className="hidden lg:flex absolute top-3 right-3 w-8 h-8 rounded-full bg-gray-100 text-[#68758A] items-center justify-center hover:bg-gray-200 transition-colors z-10"
-            title="Tutup struk"
-          >
-            <X className="w-4 h-4" />
-          </button>
-          {/* Success Header */}
-          <div className="text-center mb-4">
-            <div className="w-16 h-16 bg-[#E8FAF0] rounded-full flex items-center justify-center mx-auto">
-              <CheckCircle className="w-8 h-8 text-[#0CAF60]" />
-            </div>
-            <h2 className="text-[17px] font-semibold text-[#10233E] mt-2">Pembayaran Berhasil</h2>
-            <p className="text-[11px] font-normal text-[#68758A] mt-0.5">Transaksi telah tersimpan</p>
-          </div>
-
-          {/* Struk Paper */}
-          <div className="bg-white rounded-[16px] shadow-sm border border-gray-50 p-4 font-mono text-[11px] text-[#10233E] leading-5">
-            {/* Header Toko */}
-            <div className="text-center pb-3">
-              <p className="text-[13px] font-semibold font-sans tracking-wide">{tx.toko}</p>
-              {tx.toko_alamat && <p className="text-[10px] font-sans font-normal text-[#68758A]">{tx.toko_alamat}</p>}
-              <p className="text-[10px] font-sans font-medium text-[#0CAF60] mt-1">STRUK PEMBELIAN</p>
-            </div>
-
-            <div className="border-t border-dashed border-gray-200 my-1" />
-
-            {/* Info Transaksi */}
-            <div className="py-1">
-              <div className="flex justify-between"><span className="text-[#68758A]">No. Struk</span><span>{tx.nomor_transaksi}</span></div>
-              <div className="flex justify-between"><span className="text-[#68758A]">Tanggal</span><span>{tx.tanggal}</span></div>
-              <div className="flex justify-between"><span className="text-[#68758A]">Waktu</span><span>{tx.waktu}</span></div>
-              <div className="flex justify-between"><span className="text-[#68758A]">Kasir</span><span>{tx.kasir}</span></div>
-              <div className="flex justify-between"><span className="text-[#68758A]">Pelanggan</span><span>{tx.pelanggan}</span></div>
-              <div className="flex justify-between"><span className="text-[#68758A]">Metode</span><span>{metodeLabel}</span></div>
-              {tx.status_qris === 'pending' && <div className="flex justify-between"><span className="text-[#68758A]">Status</span><span className="text-amber-600">Pending</span></div>}
-              {tx.alasan_batal && <div className="flex justify-between"><span className="text-[#68758A]">Catatan</span><span className="text-[#D94850]">{tx.alasan_batal}</span></div>}
-            </div>
-
-            <div className="border-t border-dashed border-gray-200 my-1" />
-
-            {/* Items */}
-            <div className="py-1 space-y-1.5">
-              {(tx.items || []).map((i, idx) => (
-                <div key={idx}>
-                  <p className="font-sans font-medium">{i.nama}</p>
-                  <div className="flex justify-between text-[10px] text-[#68758A]">
-                    <span>{i.qty} x {formatRupiah(i.harga)}</span>
-                    <span className="text-[#10233E]">{formatRupiah(i.harga * i.qty)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="border-t border-dashed border-gray-200 my-1" />
-
-            {/* Totals */}
-            <div className="py-1 space-y-0.5">
-              <div className="flex justify-between"><span className="text-[#68758A]">Subtotal</span><span>{formatRupiah(subtotal)}</span></div>
-              <div className="flex justify-between"><span className="text-[#68758A]">Diskon</span><span className="text-[#D94850]">-{formatRupiah(diskon)}</span></div>
-              <div className="flex justify-between text-[13px] font-bold text-[#0CAF60] pt-1"><span>TOTAL</span><span>{formatRupiah(tx.total)}</span></div>
-              <div className="flex justify-between"><span className="text-[#68758A]">{metodeLabel}</span><span>{formatRupiah(tx.uang_diterima)}</span></div>
-              <div className="flex justify-between"><span className="text-[#68758A]">Kembalian</span><span>{formatRupiah(tx.kembalian)}</span></div>
-            </div>
-
-            <div className="border-t border-dashed border-gray-200 my-1" />
-
-            <p className="text-center text-[10px] text-[#68758A] font-sans pt-1">Terima kasih telah berbelanja! 🙏</p>
-          </div>
-
-          {/* Actions */}
-          <div className="space-y-2 mt-4">
-            <button
-              onClick={shareStruk}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-gray-100 rounded-2xl text-[13px] font-medium text-[#10233E] hover:bg-gray-50 transition-colors shadow-sm"
-            >
-              <Share2 className="w-4 h-4" />
-              Bagikan Struk
-            </button>
-            <button
-              onClick={handleNewTransaction}
-              className="w-full flex items-center justify-center gap-2 bg-[#0CAF60] hover:bg-[#087A4B] text-white font-medium py-3.5 rounded-2xl transition-all shadow-sm"
-            >
-              Transaksi Baru
-              <ArrowRight className="w-4 h-4" />
-            </button>
-            <button
-              onClick={handleNewTransaction}
-              className="w-full text-[11px] font-normal text-[#68758A] hover:text-[#10233E] transition-colors py-1"
-            >
-              Kembali ke Home
-            </button>
-          </div>
-        </div>
-      </div>
-      </>
-    );
-  }
 }
