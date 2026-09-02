@@ -267,6 +267,14 @@ export default function DashboardContent() {
 
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
+  const growth = dash.growth_persen;
+  const insight = dash.insight || { arah: 'stable', persen: null, teks: '' };
+  const prevLabel = customRange
+    ? 'periode sebelumnya'
+    : periodeFilter === 'hari_ini' ? 'kemarin' : periodeFilter === 'minggu_ini' ? 'minggu lalu' : 'bulan lalu';
+  const todayLabel = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  const activeLabel = customRange ? `${customRange.mulai} → ${customRange.selesai}` : todayLabel;
+
 
   return (
     <div className="max-w-[430px] lg:max-w-none mx-auto space-y-4 pb-24 lg:pb-8 text-[#10233E]">
