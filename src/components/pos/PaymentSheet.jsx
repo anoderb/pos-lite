@@ -1,7 +1,8 @@
 'use client';
 
 import { cn, formatRupiah } from '@/lib/utils';
-import { X, XCircle, Loader2, ArrowRight } from 'lucide-react';
+import { XCircle, Loader2, ArrowRight } from 'lucide-react';
+import Sheet from '@/components/ui/Sheet';
 
 /**
  * Bottom sheet pembayaran (mobile < lg). Presentasional — semua state & handler dari parent.
@@ -26,14 +27,7 @@ export default function PaymentSheet({
 }) {
   if (!open || isDesktop) return null;
   return (
-    <>
-      <div onClick={onClose} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fade-in" />
-      <div className="fixed left-0 right-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl border-t border-gray-100 p-5 pb-28 animate-slide-up max-h-[90vh] overflow-y-auto">
-        <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3" />
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold text-[#10233E]">Pembayaran</h2>
-          <button onClick={onClose} className="p-1"><X className="w-5 h-5 text-[#68758A]" /></button>
-        </div>
+    <Sheet open={open} onClose={onClose} title="Pembayaran" className="pb-28">
 
         {/* Ringkasan Belanja */}
         <div className="bg-[#FAFBFC] border border-gray-50 rounded-[18px] p-4 space-y-2 mb-4">
@@ -141,7 +135,6 @@ export default function PaymentSheet({
           {isPaying ? 'Memproses Pembayaran...' : payError ? 'Coba Lagi' : 'Bayar Sekarang'}
           {!isPaying && <ArrowRight className="w-4 h-4" />}
         </button>
-      </div>
-    </>
+    </Sheet>
   );
 }
