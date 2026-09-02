@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { formatRupiah } from '@/lib/utils';
+import { METODE_LABEL } from '@/lib/constants';
 import { toast } from '@/components/ui/ToastProvider';
 import QRCode from 'qrcode';
 
@@ -198,7 +199,7 @@ export function useCheckout({
   const shareStruk = useCallback(async () => {
     const tx = completedTx;
     if (!tx) return;
-    const metodeLabel = { cash: 'Tunai', qris: 'QRIS' }[tx.metode_bayar] || 'Tunai';
+    const metodeLabel = METODE_LABEL[tx.metode_bayar] || 'Tunai';
     const lines = [
       tx.toko,
       tx.toko_alamat,

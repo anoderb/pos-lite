@@ -46,6 +46,10 @@ import PaymentSheet from '@/components/pos/PaymentSheet';
 import QrisPendingPanel from '@/components/pos/QrisPendingPanel';
 import ReceiptModal from '@/components/pos/ReceiptModal';
 import QRCode from 'qrcode';
+import { METODE_LABEL, METODE_BADGE, METODE_ICON_BG } from '@/lib/constants';
+import { useProdukFilter } from '@/app/pos-engine/_hooks/useProdukFilter';
+import ProdukList from '@/app/pos-engine/_components/ProdukList';
+import RiwayatSheet from '@/app/pos-engine/_components/RiwayatSheet';
 
 /* ═══════════════════════════════════════════════════ */
 export default function KasirPosPage() {
@@ -179,16 +183,6 @@ export default function KasirPosPage() {
     fetchActiveModel, isModelLoading,
   });
 
-  const METODE_LABEL = { cash: 'Tunai', qris: 'QRIS' };
-  const METODE_BADGE = {
-    cash: 'bg-[#E8FAF0] text-[#087A4B]',
-    qris: 'bg-[#F3EEFF] text-violet-600',
-  };
-  const METODE_ICON_BG = {
-    cash: 'bg-[#E8FAF0] text-[#0CAF60]',
-    qris: 'bg-[#F3EEFF] text-violet-600',
-  };
-
   useEffect(() => { fetchRiwayat(1); }, []);
 
   // Klik nomor transaksi di riwayat → buka struk (tanpa harus baru checkout)
@@ -212,23 +206,6 @@ export default function KasirPosPage() {
       alasan_batal: t.alasan || t.alasan_batal || '',
     });
     setShowReceipt(true);
-  };
-
-  // Badge status transaksi: pending=kuning, dibatalkan=merah, selesai=hijau
-  const statusBadgeRiwayat = (t) => {
-    const sq = String(t.status_qris || '').toLowerCase();
-    const st = String(t.status || '').toLowerCase();
-    if (sq === 'pending' || st === 'pending') return { label: 'Pending', cls: 'bg-[#FFF8D9] text-amber-600' };
-    if (['cancelled', 'cancel', 'dibatalkan', 'void', 'batal'].some((k) => sq === k || st === k)) return { label: 'Batal', cls: 'bg-[#FFF0F0] text-[#D94850]' };
-    return { label: 'Sukses', cls: 'bg-[#E8FAF0] text-[#087A4B]' };
-  };
-
-
-  const formatRiwayatWaktu = (iso) => {
-    if (!iso) return '—';
-    const dt = new Date(iso);
-    return dt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ' · ' +
-      dt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   };
 
   // Deteksi desktop (≥lg) untuk pilih: inline pay vs bottom sheet
@@ -301,24 +278,10 @@ export default function KasirPosPage() {
   }, [qrisPendingTx?.qris_payload]);
 
 
-  const filteredProdukSemua = produkList.filter(p => {
-    const matchSearch = !search || p.nama.toLowerCase().includes(search.toLowerCase()) || p.barcode?.includes(search);
-    const matchKategori = selectedKategori === 'semua' || p.kategori_id === selectedKategori;
-    return matchSearch && matchKategori;
+  // Filter/sort/pagination katalog — pindahan ke useProdukFilter
+  const { produkTotalPages, filteredProduk, goProdukPage } = useProdukFilter({
+    produkList, search, selectedKategori, sortBy, produkPage, produkViews, setProdukPage,
   });
-
-  const sortedProduk = [...filteredProdukSemua].sort((a, b) => {
-    if (sortBy === 'harga') return (Number(a.harga) || 0) - (Number(b.harga) || 0);
-    if (sortBy === 'stok') return (Number(b.stok) || 0) - (Number(a.stok) || 0);
-    return (a.nama || '').localeCompare(b.nama || '');
-  });
-
-  const produkTotalPages = Math.max(1, Math.ceil(sortedProduk.length / produkViews));
-  const filteredProduk = sortedProduk.slice((produkPage - 1) * produkViews, produkPage * produkViews);
-
-  const goProdukPage = (p) => {
-    if (p >= 1 && p <= produkTotalPages) { setProdukPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  };
 
   /* ════════════════════════════════════════════════════
      SCREEN 1: HALAMAN KASIR (AWAL) — HOME VIEW
@@ -503,62 +466,14 @@ export default function KasirPosPage() {
               </button>
             )}
           </div>
-        ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
-            {filteredProduk.map((p, idx) => {
-              const habis = Number(p.stok ?? 0) <= 0;
-              return (
-                <div
-                  key={p.id || `fav-${idx}`}
-                  className={`bg-white border rounded-[16px] p-2.5 shadow-sm transition-all relative flex flex-col ${habis ? 'border-gray-100 opacity-60' : 'border-gray-50 hover:border-[#0CAF60]'}`}
-                >
-                  {habis && (
-                    <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-[#FFF0F0] text-[#D94850] text-[8px] font-medium rounded-md">
-                      HABIS
-                    </span>
-                  )}
-                  <ProdukThumb nama={p.nama} img={p.foto_url} className="w-full h-16 rounded-lg mb-2 text-sm" />
-                  <h4 className="text-[11px] font-medium text-[#10233E] truncate">{p.nama}</h4>
-                  <p className={`text-[11px] font-medium mt-0.5 ${habis ? 'text-[#D94850]' : 'text-[#087A4B]'}`}>{formatRupiah(p.harga)}</p>
-                  <p className="text-[9px] font-normal text-[#68758A] mt-0.5">Stok: {Number(p.stok ?? 0)}</p>
-                  <div className="mt-1.5 pt-1.5 border-t border-gray-50 flex items-center justify-end">
-                    <button
-                      onClick={() => addToCart(p)}
-                      disabled={habis}
-                      className="w-6 h-6 rounded-lg bg-[#E8FAF0] text-[#0CAF60] flex items-center justify-center active:scale-90 transition-all disabled:opacity-50"
-                      title="Tambah ke keranjang"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         ) : (
-          <div className="space-y-2">
-            {filteredProduk.map((p, idx) => {
-              const habis = Number(p.stok ?? 0) <= 0;
-              return (
-                <div key={p.id || `list-${idx}`} className={`flex items-center gap-3 bg-white border rounded-xl px-3 py-2 shadow-sm transition-all ${habis ? 'border-gray-100 opacity-60' : 'border-gray-50 hover:border-[#0CAF60]'}`}>
-                  <ProdukThumb nama={p.nama} img={p.foto_url} className="w-10 h-10 rounded-lg shrink-0 text-[10px]" />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-medium text-[#10233E] truncate">{p.nama}</h4>
-                    <p className="text-[10px] font-normal text-[#68758A]">Stok: {Number(p.stok ?? 0)}</p>
-                  </div>
-                  <p className={`text-xs font-medium shrink-0 ${habis ? 'text-[#D94850]' : 'text-[#087A4B]'}`}>{formatRupiah(p.harga)}</p>
-                  <button
-                    onClick={() => addToCart(p)}
-                    disabled={habis}
-                    className="w-6 h-6 rounded-lg bg-[#E8FAF0] text-[#0CAF60] flex items-center justify-center active:scale-90 transition-all disabled:opacity-50 shrink-0"
-                    title="Tambah ke keranjang"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+          <ProdukList
+            produk={filteredProduk}
+            onAdd={addToCart}
+            variant={viewMode}
+            emptyText="Produk tidak ditemukan"
+            onResetSearch={() => setSearch('')}
+          />
         )}
 
         {/* Pagination Katalog */}
@@ -836,102 +751,17 @@ export default function KasirPosPage() {
       </div>
 
       {/* ── History Transaksi Terbaru ── */}
-      <section className="bg-white border border-gray-50 rounded-[18px] shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50 bg-[#FAFBFC]">
-          <div className="flex items-center gap-2">
-            <span className="w-7 h-7 rounded-lg bg-[#E8FAF0] text-[#0CAF60] flex items-center justify-center"><ReceiptText className="w-3.5 h-3.5" /></span>
-            <span className="text-[13px] font-medium text-[#10233E]">History Transaksi</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => switchRiwayatFilter('semua')}
-              className={cn('px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors', riwayatFilter === 'semua' ? 'bg-[#0CAF60] text-white' : 'bg-gray-100 text-[#68758A] hover:bg-gray-200')}
-            >
-              Semua
-            </button>
-            <button
-              onClick={() => switchRiwayatFilter('pending')}
-              className={cn('px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors flex items-center gap-1', riwayatFilter === 'pending' ? 'bg-[#0CAF60] text-white' : 'bg-gray-100 text-[#68758A] hover:bg-gray-200')}
-            >
-              Pending
-              {riwayatPendingTotal > 0 && (
-                <span className={cn('w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center', riwayatFilter === 'pending' ? 'bg-white/25' : 'bg-[#F59E0B] text-white')}>{riwayatPendingTotal}</span>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {isRiwayatLoading ? (
-          <div className="px-4 py-2 space-y-2">
-            {[0, 1, 2].map(i => (
-              <div key={i} className="flex items-center gap-3 py-2">
-                <div className="w-9 h-9 rounded-xl bg-gray-100 animate-pulse shrink-0" />
-                <div className="flex-1 space-y-1.5">
-                  <div className="h-3 w-32 bg-gray-100 animate-pulse rounded" />
-                  <div className="h-2.5 w-20 bg-gray-100 animate-pulse rounded" />
-                </div>
-                <div className="h-4 w-14 bg-gray-100 animate-pulse rounded" />
-              </div>
-            ))}
-          </div>
-        ) : riwayat.length === 0 ? (
-          <div className="px-4 py-8 text-center">
-            <div className="w-12 h-12 rounded-full bg-[#E8FAF0] flex items-center justify-center mx-auto mb-2 text-[#0CAF60]"><ReceiptText className="w-5 h-5" /></div>
-            <p className="text-[11px] font-medium text-[#10233E]">Belum Ada Transaksi</p>
-            <p className="text-[10px] font-normal text-[#68758A] mt-0.5">{riwayatFilter === 'pending' ? 'Tidak ada transaksi QRIS yang menunggu persetujuan.' : 'Transaksi yang selesai akan tampil di sini.'}</p>
-          </div>
-        ) : (
-          <>
-            <div className="px-4 py-1 divide-y divide-gray-50">
-              {riwayat.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => openStrukRiwayat(t)}
-                  className="w-full flex items-center gap-2.5 py-2.5 text-left hover:bg-gray-50/70 transition-colors rounded-lg"
-                >
-                  <span className={cn('w-9 h-9 rounded-xl flex flex-col items-center justify-center shrink-0', METODE_ICON_BG[t.metode_bayar] || METODE_ICON_BG.cash)}>
-                    <Banknote className="w-4 h-4" />
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-medium text-[#10233E] font-mono truncate">{t.nomor_transaksi}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      <span className="text-[9px] font-normal text-[#68758A]">{formatRiwayatWaktu(t.created_at)}</span>
-                      {(() => { const b = statusBadgeRiwayat(t); return b ? <span className={cn('text-[8px] font-medium px-1.5 py-px rounded-full', b.cls)}>{b.label}</span> : null; })()}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[11px] font-semibold text-[#10233E]">{formatRupiah(t.total)}</p>
-                    {t.diskon_total > 0 && (
-                      <p className="text-[8px] font-normal text-[#F59E0B]">Diskon {formatRupiah(t.diskon_total)}</p>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Pagination */}
-            {riwayatPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-50 bg-[#FAFBFC]">
-                <button
-                  onClick={() => reloadRiwayatPage(riwayatPage - 1)}
-                  disabled={riwayatPage <= 1 || isRiwayatLoading}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-gray-100 text-[10px] font-medium text-[#68758A] shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all disabled:opacity-40 disabled:pointer-events-none"
-                >
-                  <ChevronLeft className="w-3 h-3" /> Sebelumnya
-                </button>
-                <span className="text-[10px] font-normal text-[#68758A]">Halaman {riwayatPage} dari {riwayatPages}</span>
-                <button
-                  onClick={() => reloadRiwayatPage(riwayatPage + 1)}
-                  disabled={riwayatPage >= riwayatPages || isRiwayatLoading}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-gray-100 text-[10px] font-medium text-[#68758A] shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all disabled:opacity-40 disabled:pointer-events-none"
-                >
-                  Berikutnya <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </section>
+      <RiwayatSheet
+        riwayat={riwayat}
+        riwayatFilter={riwayatFilter}
+        riwayatPendingTotal={riwayatPendingTotal}
+        isRiwayatLoading={isRiwayatLoading}
+        riwayatPage={riwayatPage}
+        riwayatPages={riwayatPages}
+        switchRiwayatFilter={switchRiwayatFilter}
+        reloadRiwayatPage={reloadRiwayatPage}
+        openStrukRiwayat={openStrukRiwayat}
+      />
 
       </div>{/* ── tutup kolom kanan ── */}
 
